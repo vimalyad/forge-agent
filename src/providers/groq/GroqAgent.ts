@@ -1,6 +1,6 @@
 import Groq from 'groq-sdk';
 import type { ChatCompletionContentPart } from 'groq-sdk/resources/chat/completions.js';
-import { DEFAULT_GROQ_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../../config/constants.js';
+import { DEFAULT_GROQ_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT, ENHANCEMENT_PROMPT } from '../../config/constants.js';
 import type { Display } from '../../ui/Display.js';
 import type { ToolRegistry } from '../../tools/ToolRegistry.js';
 import type { IAgent } from '../../core/IAgent.js';
@@ -21,6 +21,8 @@ export class GroqAgent implements IAgent {
     private readonly model = DEFAULT_GROQ_MODEL,
   ) {}
 
+  private hasEnhanced = false;
+
   async run(userInput: string, signal?: AbortSignal): Promise<void> {
     const targetUrl = await this.resolveTargetUrl(userInput, signal);
     if (signal?.aborted) throw Object.assign(new Error('Interrupted'), { name: 'AbortError' });
@@ -30,15 +32,17 @@ export class GroqAgent implements IAgent {
     const blueprint = scrapeResult.text;
     const screenshotBase64 = scrapeResult.screenshotBase64;
     let correction = '';
+    let currentHtml = '';
+    let enhancementMode = false;
 
     for (let step = 1; step <= MAX_AGENT_STEPS; step += 1) {
       if (signal?.aborted) throw Object.assign(new Error('Interrupted'), { name: 'AbortError' });
-      this.display.startSpinner(`thinking step ${step}`);
+      this.display.startSpinner(enhancementMode ? `enhancing visual design (step ${step})` : `thinking step ${step}`);
 
       let html: string;
 
       try {
-        html = await this.generateHtml(userInput, blueprint, correction, screenshotBase64);
+        html = await this.generateHtml(userInput, blueprint, correction, currentHtml, enhancementMode, screenshotBase64);
       } catch (error) {
         this.display.stopSpinner(false, 'API call failed');
         throw error;
@@ -75,10 +79,20 @@ export class GroqAgent implements IAgent {
       const validationError = await this.outputValidator.validate();
 
       if (!validationError) {
+        if (!this.hasEnhanced) {
+          this.hasEnhanced = true;
+          enhancementMode = true;
+          currentHtml = readResult.output;
+          correction = '';
+          this.display.agentMessage('Injecting expert visual design critic prompt for enhancement pass...');
+          continue;
+        }
+
         this.display.agentMessage('Generated output/index.html with a header, hero section, footer, embedded CSS, and JavaScript.');
         return;
       }
 
+      enhancementMode = false;
       correction = validationError;
 
       if (step >= 3) {
@@ -122,6 +136,8 @@ export class GroqAgent implements IAgent {
     userInput: string,
     blueprint: string,
     correction: string,
+    currentHtml: string,
+    enhancementMode: boolean,
     screenshotBase64?: string,
   ): Promise<string> {
     const userContent: ChatCompletionContentPart[] = [];
@@ -134,18 +150,25 @@ export class GroqAgent implements IAgent {
       });
     }
 
+    const textBlocks: string[] = [userInput, ''];
+
+    if (screenshotBase64) {
+      textBlocks.push('The screenshot above shows the live visual layout of the page. Use it as a visual reference alongside the cleaned blueprint below.');
+    }
+
+    if (enhancementMode && currentHtml) {
+      textBlocks.push(ENHANCEMENT_PROMPT);
+      textBlocks.push(`\n--- TARGET BLUEPRINT ---\n${this.compactBlueprint(blueprint)}`);
+      textBlocks.push(`\n--- GENERATED HTML ---\n${currentHtml}`);
+    } else {
+      textBlocks.push('Cleaned website blueprint:');
+      textBlocks.push(this.compactBlueprint(blueprint));
+      if (correction) textBlocks.push(`Previous validation error: ${correction}`);
+    }
+
     userContent.push({
       type: 'text',
-      text: [
-        userInput,
-        '',
-        screenshotBase64
-          ? 'The screenshot above shows the live visual layout of the page. Use it as a visual reference alongside the cleaned blueprint below.'
-          : '',
-        'Cleaned website blueprint:',
-        this.compactBlueprint(blueprint),
-        correction ? `Previous validation error: ${correction}` : '',
-      ].filter(Boolean).join('\n'),
+      text: textBlocks.filter(Boolean).join('\n'),
     });
 
     const response = await this.client.chat.completions.create({

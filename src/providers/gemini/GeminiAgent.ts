@@ -1,5 +1,5 @@
 import type { Content, GoogleGenAI, Part } from '@google/genai';
-import { DEFAULT_GEMINI_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../../config/constants.js';
+import { DEFAULT_GEMINI_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT, ENHANCEMENT_PROMPT } from '../../config/constants.js';
 import type { Display } from '../../ui/Display.js';
 import type { ToolRegistry } from '../../tools/ToolRegistry.js';
 import type { IAgent } from '../../core/IAgent.js';
@@ -20,6 +20,11 @@ export class GeminiAgent implements IAgent {
     private readonly outputValidator = new OutputValidator(),
     private readonly model = DEFAULT_GEMINI_MODEL,
   ) {}
+
+  private hasEnhanced = false;
+  private latestBlueprint = '';
+  private latestScreenshotBase64?: string;
+  private latestHtml = '';
 
   async run(userInput: string, signal?: AbortSignal): Promise<void> {
     this.history.push({ role: 'user', parts: [{ text: userInput }] });
@@ -106,6 +111,13 @@ export class GeminiAgent implements IAgent {
             } else {
               this.display.toolResult(call.name ?? 'unknown', true, output.slice(0, 100));
             }
+
+            if (call.name === 'scrape_website') {
+              this.latestBlueprint = output;
+              this.latestScreenshotBase64 = screenshotBase64;
+            } else if (call.name === 'write_file' && args?.path === 'output/index.html') {
+              this.latestHtml = args.content as string;
+            }
           }
         } catch (error) {
           output = `Error: ${(error as Error).message}`;
@@ -150,6 +162,37 @@ export class GeminiAgent implements IAgent {
       };
 
       this.history.push(toolContent);
+
+      // Inject enhancement prompt after the first successful write_file
+      if (
+        !this.hasEnhanced &&
+        calls.some((c) => c.name === 'write_file') &&
+        this.latestHtml &&
+        this.latestBlueprint
+      ) {
+        this.hasEnhanced = true;
+        this.display.agentMessage('Injecting expert visual design critic prompt for enhancement pass...');
+        
+        const enhancementParts: Part[] = [
+          { text: ENHANCEMENT_PROMPT },
+          { text: `\n\n--- TARGET BLUEPRINT ---\n${this.latestBlueprint}` },
+          { text: `\n\n--- GENERATED HTML ---\n${this.latestHtml}` },
+        ];
+
+        if (this.latestScreenshotBase64) {
+          enhancementParts.push({
+            inlineData: {
+              mimeType: 'image/png',
+              data: this.latestScreenshotBase64,
+            },
+          });
+        }
+
+        this.history.push({
+          role: 'user',
+          parts: enhancementParts,
+        });
+      }
     }
 
     throw new Error(`Agent reached ${MAX_AGENT_STEPS} steps without finishing.`);
