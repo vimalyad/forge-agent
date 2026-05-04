@@ -274,7 +274,7 @@ export class ScrapeWebsiteTool implements ITool {
     
     let totalHeight = 0;
     let width = 0;
-    const idats: Buffer[] = [];
+    const uncompressedScanlines: Buffer[] = [];
     
     for (const buf of buffers) {
       if (buf.readUInt32BE(0) !== 0x89504e47 || buf.readUInt32BE(4) !== 0x0d0a1a0a) {
@@ -282,6 +282,7 @@ export class ScrapeWebsiteTool implements ITool {
       }
       let offset = 8;
       let h = 0;
+      const idats: Buffer[] = [];
       while (offset < buf.length) {
         const length = buf.readUInt32BE(offset);
         const type = buf.toString('ascii', offset + 4, offset + 8);
@@ -296,10 +297,10 @@ export class ScrapeWebsiteTool implements ITool {
         offset += length + 12;
       }
       totalHeight += h;
+      uncompressedScanlines.push(zlib.inflateSync(Buffer.concat(idats)));
     }
     
-    const compressedIdat = Buffer.concat(idats);
-    const uncompressed = zlib.inflateSync(compressedIdat);
+    const uncompressed = Buffer.concat(uncompressedScanlines);
     const newCompressed = zlib.deflateSync(uncompressed);
     
     const template = buffers[0];
@@ -314,8 +315,8 @@ export class ScrapeWebsiteTool implements ITool {
       if (type === 'IHDR') {
         const ihdr = Buffer.alloc(length + 12);
         template.copy(ihdr, 0, offset, offset + length + 12);
-        ihdr.writeUInt32BE(totalHeight, 16);
-        const crc = this.crc32(ihdr.subarray(4, 4 + length + 4));
+        ihdr.writeUInt32BE(totalHeight, 12);
+        const crc = this.crc32(ihdr.subarray(4, 4 + 4 + length));
         ihdr.writeUInt32BE(crc, 8 + length);
         newPng.push(ihdr);
       } else if (type === 'IDAT') {

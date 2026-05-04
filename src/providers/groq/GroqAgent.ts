@@ -1,6 +1,6 @@
 import Groq from 'groq-sdk';
 import type { ChatCompletionContentPart } from 'groq-sdk/resources/chat/completions.js';
-import { DEFAULT_GROQ_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT, ENHANCEMENT_PROMPT } from '../../config/constants.js';
+import { DEFAULT_GROQ_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../../config/constants.js';
 import type { Display } from '../../ui/Display.js';
 import type { ToolRegistry } from '../../tools/ToolRegistry.js';
 import type { IAgent } from '../../core/IAgent.js';

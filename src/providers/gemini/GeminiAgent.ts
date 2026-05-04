@@ -21,10 +21,7 @@ export class GeminiAgent implements IAgent {
     private readonly model = DEFAULT_GEMINI_MODEL,
   ) {}
 
-  private hasEnhanced = false;
   private latestBlueprint = '';
-  private latestScreenshotBase64?: string;
-  private latestHtml = '';
 
   async run(userInput: string, signal?: AbortSignal): Promise<void> {
     this.history.push({ role: 'user', parts: [{ text: userInput }] });
@@ -115,9 +112,6 @@ export class GeminiAgent implements IAgent {
 
             if (call.name === 'scrape_website') {
               this.latestBlueprint = output;
-              this.latestScreenshotBase64 = screenshotBase64;
-            } else if (call.name === 'write_file' && args?.path === 'output/index.html') {
-              this.latestHtml = args.content as string;
             }
           }
         } catch (error) {
@@ -182,7 +176,7 @@ export class GeminiAgent implements IAgent {
     const screenshotBase64 = this.extractLastScreenshot();
     
     const parts: Part[] = [
-      { text: `Enhancement pass: The HTML above has passed basic validation. Now elevate it to production quality. Read the screenshot carefully.\n\nYou must: (1) match the exact hero background treatment from the screenshot, (2) extract the precise brand primary color and apply it consistently via a CSS variable, (3) ensure the navbar is sticky with backdrop blur if the screenshot shows a translucent nav, (4) add hover transitions to all cards and buttons, (5) add an IntersectionObserver fade-in for cards and section headings, (6) add mobile nav toggle JavaScript, (7) ensure the footer background matches the screenshot exactly.\n\nCall write_file with the fully enhanced output/index.html. Do not truncate. Do not add placeholder content. Output must exceed 8000 characters.` }
+      { text: `${ENHANCEMENT_PROMPT}\n\nSemantic blueprint of the target site for structural reference:\n${this.latestBlueprint.slice(0, 3000)}` }
     ];
 
     if (screenshotBase64) {
