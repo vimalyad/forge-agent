@@ -1,14 +1,24 @@
-import type { Content, GoogleGenAI, Part } from '@google/genai';
-import { DEFAULT_GEMINI_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT, ENHANCEMENT_PROMPT } from '../../config/constants.js';
-import type { Display } from '../../ui/Display.js';
-import type { ToolRegistry } from '../../tools/ToolRegistry.js';
-import type { IAgent } from '../../core/IAgent.js';
-import type { MessageHistory } from '../../services/MessageHistory.js';
-import { OutputValidator } from '../../services/OutputValidator.js';
-import type { ToolJudge } from '../../core/ToolJudge.js';
+import type { Content, GoogleGenAI, Part } from "@google/genai";
+import {
+  DEFAULT_GEMINI_MODEL,
+  MAX_AGENT_STEPS,
+  SYSTEM_PROMPT,
+  ENHANCEMENT_PROMPT,
+} from "../../config/constants.js";
+import type { Display } from "../../ui/Display.js";
+import type { ToolRegistry } from "../../tools/ToolRegistry.js";
+import type { IAgent } from "../../core/IAgent.js";
+import type { MessageHistory } from "../../services/MessageHistory.js";
+import { OutputValidator } from "../../services/OutputValidator.js";
+import type { ToolJudge } from "../../core/ToolJudge.js";
 
-const JUDGED_TOOLS = new Set(['write_file', 'web_fetch', 'scrape_website', 'read_file']);
-const PRE_JUDGED_TOOLS = new Set(['write_file']);
+const JUDGED_TOOLS = new Set([
+  "write_file",
+  "web_fetch",
+  "scrape_website",
+  "read_file",
+]);
+const PRE_JUDGED_TOOLS = new Set(["write_file"]);
 
 export class GeminiAgent implements IAgent {
   constructor(
@@ -21,13 +31,14 @@ export class GeminiAgent implements IAgent {
     private readonly model = DEFAULT_GEMINI_MODEL,
   ) {}
 
-  private latestBlueprint = '';
+  private latestBlueprint = "";
 
   async run(userInput: string, signal?: AbortSignal): Promise<void> {
-    this.history.push({ role: 'user', parts: [{ text: userInput }] });
+    this.history.push({ role: "user", parts: [{ text: userInput }] });
 
     for (let step = 1; step <= MAX_AGENT_STEPS; step += 1) {
-      if (signal?.aborted) throw Object.assign(new Error('Interrupted'), { name: 'AbortError' });
+      if (signal?.aborted)
+        throw Object.assign(new Error("Interrupted"), { name: "AbortError" });
       this.display.startSpinner(`thinking step ${step}`);
 
       let response;
@@ -42,7 +53,7 @@ export class GeminiAgent implements IAgent {
           },
         });
       } catch (error) {
-        this.display.stopSpinner(false, 'API call failed');
+        this.display.stopSpinner(false, "API call failed");
         throw error;
       }
 
@@ -71,8 +82,12 @@ export class GeminiAgent implements IAgent {
         }
 
         this.history.push({
-          role: 'user',
-          parts: [{ text: `Final output validation failed: ${validationError} Continue and fix output/index.html before claiming completion.` }],
+          role: "user",
+          parts: [
+            {
+              text: `Final output validation failed: ${validationError} Continue and fix output/index.html before claiming completion.`,
+            },
+          ],
         });
         continue;
       }
@@ -80,18 +95,26 @@ export class GeminiAgent implements IAgent {
       const toolResults: Part[] = [];
 
       for (const call of calls) {
-        if (signal?.aborted) throw Object.assign(new Error('Interrupted'), { name: 'AbortError' });
+        if (signal?.aborted)
+          throw Object.assign(new Error("Interrupted"), { name: "AbortError" });
         const args = call.args as Record<string, unknown> | undefined;
-        this.display.toolCall(call.name ?? 'unknown', args ?? {});
+        this.display.toolCall(call.name ?? "unknown", args ?? {});
 
-        let output = '';
+        let output = "";
         let success = true;
         let screenshotBase64: string | undefined;
 
         try {
           if (call.name && PRE_JUDGED_TOOLS.has(call.name)) {
-            const preResult = await this.judge.evaluatePre(call.name, args ?? {});
-            this.display.judgePreResult(call.name, preResult.passed, preResult.reason);
+            const preResult = await this.judge.evaluatePre(
+              call.name,
+              args ?? {},
+            );
+            this.display.judgePreResult(
+              call.name,
+              preResult.passed,
+              preResult.reason,
+            );
 
             if (!preResult.passed) {
               success = false;
@@ -105,19 +128,27 @@ export class GeminiAgent implements IAgent {
             screenshotBase64 = rich.screenshotBase64;
 
             if (screenshotBase64) {
-              this.display.toolResult(call.name ?? 'unknown', true, `scraped + screenshot captured (${Math.round(screenshotBase64.length * 0.75 / 1024)}kb PNG)`);
+              this.display.toolResult(
+                call.name ?? "unknown",
+                true,
+                `scraped + screenshot captured (${Math.round((screenshotBase64.length * 0.75) / 1024)}kb PNG)`,
+              );
             } else {
-              this.display.toolResult(call.name ?? 'unknown', true, output.slice(0, 100));
+              this.display.toolResult(
+                call.name ?? "unknown",
+                true,
+                output.slice(0, 100),
+              );
             }
 
-            if (call.name === 'scrape_website') {
+            if (call.name === "scrape_website") {
               this.latestBlueprint = output;
             }
           }
         } catch (error) {
           output = `Error: ${(error as Error).message}`;
           success = false;
-          this.display.toolResult(call.name ?? 'unknown', false, output);
+          this.display.toolResult(call.name ?? "unknown", false, output);
         }
 
         if (success && call.name && JUDGED_TOOLS.has(call.name)) {
@@ -142,7 +173,7 @@ export class GeminiAgent implements IAgent {
         if (screenshotBase64) {
           resultParts.push({
             inlineData: {
-              mimeType: 'image/png',
+              mimeType: "image/png",
               data: screenshotBase64,
             },
           });
@@ -152,40 +183,50 @@ export class GeminiAgent implements IAgent {
       }
 
       const toolContent: Content = {
-        role: 'user',
+        role: "user",
         parts: toolResults,
       };
 
       this.history.push(toolContent);
     }
 
-    throw new Error(`Agent reached ${MAX_AGENT_STEPS} steps without finishing.`);
+    throw new Error(
+      `Agent reached ${MAX_AGENT_STEPS} steps without finishing.`,
+    );
   }
 
   private async runEnhancementPass(signal?: AbortSignal): Promise<void> {
-    this.display.agentMessage('Injecting expert visual design critic prompt for enhancement pass...');
-    
-    let html = '';
+    this.display.agentMessage(
+      "Injecting expert visual design critic prompt for enhancement pass...",
+    );
+
+    let html = "";
     try {
-      html = await this.registry.execute('read_file', { path: 'output/index.html' });
+      html = await this.registry.execute("read_file", {
+        path: "output/index.html",
+      });
     } catch {
-      this.display.warn('Enhancement pass failed: could not read output/index.html');
+      this.display.warn(
+        "Enhancement pass failed: could not read output/index.html",
+      );
       return;
     }
 
     const screenshotBase64 = this.extractLastScreenshot();
-    
+
     const parts: Part[] = [
-      { text: `${ENHANCEMENT_PROMPT}\n\nSemantic blueprint of the target site for structural reference:\n${this.latestBlueprint.slice(0, 3000)}` }
+      {
+        text: `${ENHANCEMENT_PROMPT}\n\nSemantic blueprint of the target site for structural reference:\n${this.latestBlueprint.slice(0, 3000)}`,
+      },
     ];
 
     if (screenshotBase64) {
       parts.unshift({
-        inlineData: { mimeType: 'image/png', data: screenshotBase64 }
+        inlineData: { mimeType: "image/png", data: screenshotBase64 },
       });
     }
 
-    this.history.push({ role: 'user', parts });
+    this.history.push({ role: "user", parts });
 
     for (let step = 1; step <= 4; step += 1) {
       if (signal?.aborted) return;
@@ -202,7 +243,7 @@ export class GeminiAgent implements IAgent {
           },
         });
       } catch (error) {
-        this.display.stopSpinner(false, 'API call failed');
+        this.display.stopSpinner(false, "API call failed");
         return;
       }
 
@@ -222,15 +263,22 @@ export class GeminiAgent implements IAgent {
       for (const call of calls) {
         if (signal?.aborted) return;
         const args = call.args as Record<string, unknown> | undefined;
-        this.display.toolCall(call.name ?? 'unknown', args ?? {});
+        this.display.toolCall(call.name ?? "unknown", args ?? {});
 
-        let output = '';
+        let output = "";
         let success = true;
 
         try {
           if (call.name && PRE_JUDGED_TOOLS.has(call.name)) {
-            const preResult = await this.judge.evaluatePre(call.name, args ?? {});
-            this.display.judgePreResult(call.name, preResult.passed, preResult.reason);
+            const preResult = await this.judge.evaluatePre(
+              call.name,
+              args ?? {},
+            );
+            this.display.judgePreResult(
+              call.name,
+              preResult.passed,
+              preResult.reason,
+            );
             if (!preResult.passed) {
               success = false;
               output = `[PRE-EXECUTION JUDGE FAIL: ${preResult.reason}]`;
@@ -239,18 +287,23 @@ export class GeminiAgent implements IAgent {
 
           if (success) {
             output = await this.registry.execute(call.name, args);
-            this.display.toolResult(call.name ?? 'unknown', true, output.slice(0, 100));
+            this.display.toolResult(
+              call.name ?? "unknown",
+              true,
+              output.slice(0, 100),
+            );
           }
         } catch (error) {
           output = `Error: ${(error as Error).message}`;
           success = false;
-          this.display.toolResult(call.name ?? 'unknown', false, output);
+          this.display.toolResult(call.name ?? "unknown", false, output);
         }
 
         if (success && call.name && JUDGED_TOOLS.has(call.name)) {
           const result = await this.judge.evaluate(call.name, output);
           this.display.judgeResult(result.passed, result.reason);
-          if (!result.passed) output = `${output}\n\n[JUDGE FAIL: ${result.reason}]`;
+          if (!result.passed)
+            output = `${output}\n\n[JUDGE FAIL: ${result.reason}]`;
         }
 
         toolResults.push({
@@ -261,14 +314,16 @@ export class GeminiAgent implements IAgent {
         });
       }
 
-      this.history.push({ role: 'user', parts: toolResults });
+      this.history.push({ role: "user", parts: toolResults });
     }
 
     const validationError = await this.outputValidator.validate();
     if (validationError) {
-      this.display.warn(`Enhancement pass validation failed: ${validationError}`);
+      this.display.warn(
+        `Enhancement pass validation failed: ${validationError}`,
+      );
     } else {
-      this.display.agentMessage('Enhancement pass complete.');
+      this.display.agentMessage("Enhancement pass complete.");
     }
   }
 
@@ -278,7 +333,7 @@ export class GeminiAgent implements IAgent {
       const parts = all[i].parts;
       if (!parts) continue;
       for (const part of parts) {
-        if (part.inlineData && part.inlineData.mimeType === 'image/png') {
+        if (part.inlineData && part.inlineData.mimeType === "image/png") {
           return part.inlineData.data;
         }
       }
@@ -287,10 +342,12 @@ export class GeminiAgent implements IAgent {
   }
 
   private textFromContent(content: Content | undefined): string {
-    return content?.parts
-      ?.map((part) => part.text)
-      .filter((text): text is string => Boolean(text))
-      .join('\n')
-      .trim() ?? '';
+    return (
+      content?.parts
+        ?.map((part) => part.text)
+        .filter((text): text is string => Boolean(text))
+        .join("\n")
+        .trim() ?? ""
+    );
   }
 }

@@ -1,35 +1,35 @@
-import { Type, type FunctionDeclaration } from '@google/genai';
-import type { ITool } from '../core/ITool.js';
+import { Type, type FunctionDeclaration } from "@google/genai";
+import type { ITool } from "../core/ITool.js";
 
 export class WebFetchTool implements ITool {
-  readonly name = 'web_fetch';
+  readonly name = "web_fetch";
 
   readonly schema: FunctionDeclaration = {
     name: this.name,
-    description: 'Fetch text content from an HTTP or HTTPS URL.',
+    description: "Fetch text content from an HTTP or HTTPS URL.",
     parameters: {
       type: Type.OBJECT,
       properties: {
         url: {
           type: Type.STRING,
-          description: 'URL to fetch.',
+          description: "URL to fetch.",
         },
       },
-      required: ['url'],
+      required: ["url"],
     },
   };
 
   async execute(args: Record<string, unknown>): Promise<string> {
-    const url = String(args.url ?? '');
+    const url = String(args.url ?? "");
     const parsedUrl = new URL(url);
 
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      throw new Error('Only HTTP and HTTPS URLs are supported.');
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      throw new Error("Only HTTP and HTTPS URLs are supported.");
     }
 
     const response = await fetch(parsedUrl, {
       headers: {
-        'User-Agent': 'forge-agent/1.0',
+        "User-Agent": "forge-agent/1.0",
       },
     });
 

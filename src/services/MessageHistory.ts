@@ -1,4 +1,4 @@
-import type { Content } from '@google/genai';
+import type { Content } from "@google/genai";
 
 export class MessageHistory {
   private messages: Content[] = [];

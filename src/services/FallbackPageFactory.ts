@@ -2,14 +2,21 @@ export class FallbackPageFactory {
   create(blueprint: string): string {
     const details = this.extractDetails(blueprint);
 
-    const navLinksHtml = details.navLinks.map(link => `<a href="#${link.toLowerCase().replace(/[^a-z0-9]+/g, '-')}">${link}</a>`).join('\n        ');
-    
-    let sectionsHtml = '';
+    const navLinksHtml = details.navLinks
+      .map(
+        (link) =>
+          `<a href="#${link.toLowerCase().replace(/[^a-z0-9]+/g, "-")}">${link}</a>`,
+      )
+      .join("\n        ");
+
+    let sectionsHtml = "";
     details.sections.forEach((section, index) => {
       const isAlt = index % 2 === 1;
-      const sectionClass = isAlt ? 'section alt-bg' : 'section';
-      
-      const cardsHtml = section.items.map(item => `
+      const sectionClass = isAlt ? "section alt-bg" : "section";
+
+      const cardsHtml = section.items
+        .map(
+          (item) => `
         <article class="card">
           <div>
             <h3>${item}</h3>
@@ -17,7 +24,9 @@ export class FallbackPageFactory {
           </div>
           <a href="#">Learn more</a>
         </article>
-      `).join('');
+      `,
+        )
+        .join("");
 
       sectionsHtml += `
     <section class="${sectionClass}">
@@ -32,12 +41,16 @@ export class FallbackPageFactory {
 `;
     });
 
-    const footerColumnsHtml = details.footerColumns.map(col => `
+    const footerColumnsHtml = details.footerColumns
+      .map(
+        (col) => `
       <div>
         <h4>Links</h4>
-        ${col.map(link => `<a href="#">${link}</a>`).join('\n        ')}
+        ${col.map((link) => `<a href="#">${link}</a>`).join("\n        ")}
       </div>
-    `).join('');
+    `,
+      )
+      .join("");
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -386,7 +399,10 @@ export class FallbackPageFactory {
         </div>
         <div class="hero-panel">
           <p class="panel-title">Explore our offerings</p>
-          ${details.navLinks.slice(0, 3).map(link => `<div class="track"><strong>${link}</strong></div>`).join('')}
+          ${details.navLinks
+            .slice(0, 3)
+            .map((link) => `<div class="track"><strong>${link}</strong></div>`)
+            .join("")}
         </div>
       </div>
     </section>
@@ -432,28 +448,42 @@ export class FallbackPageFactory {
 
   private extractDetails(blueprint: string) {
     const titleMatch = blueprint.match(/title:\s*(.+)/i);
-    let siteName = 'My Application';
+    let siteName = "My Application";
     if (titleMatch) {
-      siteName = titleMatch[1].trim().replace(/\.(com|io|ai|co)$/i, '').split('|')[0].trim();
+      siteName = titleMatch[1]
+        .trim()
+        .replace(/\.(com|io|ai|co)$/i, "")
+        .split("|")[0]
+        .trim();
     }
 
     const colorMatch = blueprint.match(/#[0-9a-fA-F]{3,6}/);
-    const primaryColor = colorMatch ? colorMatch[0] : '#2563EB';
+    const primaryColor = colorMatch ? colorMatch[0] : "#2563EB";
 
-    const navLines = blueprint.split('\n').filter(l => l.match(/^-\s+(link|a):/i));
-    const navLinks = navLines.slice(0, 5).map(l => l.replace(/^-\s+(link|a):\s*/i, '').replace(/\s*->.*$/, '').trim());
-    if (navLinks.length === 0) navLinks.push('Home', 'About', 'Services', 'Contact');
+    const navLines = blueprint
+      .split("\n")
+      .filter((l) => l.match(/^-\s+(link|a):/i));
+    const navLinks = navLines.slice(0, 5).map((l) =>
+      l
+        .replace(/^-\s+(link|a):\s*/i, "")
+        .replace(/\s*->.*$/, "")
+        .trim(),
+    );
+    if (navLinks.length === 0)
+      navLinks.push("Home", "About", "Services", "Contact");
 
     const h1Match = blueprint.match(/-\s+h1:\s+(.+)/i);
     const heroHeadline = h1Match ? h1Match[1].trim() : `Welcome to ${siteName}`;
 
     const descMatch = blueprint.match(/description:\s*(.+)/i);
-    const heroSubtext = descMatch ? descMatch[1].trim() : 'We provide the best services for your needs.';
+    const heroSubtext = descMatch
+      ? descMatch[1].trim()
+      : "We provide the best services for your needs.";
 
-    const sections: { heading: string, items: string[] }[] = [];
-    const lines = blueprint.split('\n');
-    let currentSection: { heading: string, items: string[] } | null = null;
-    
+    const sections: { heading: string; items: string[] }[] = [];
+    const lines = blueprint.split("\n");
+    let currentSection: { heading: string; items: string[] } | null = null;
+
     for (const line of lines) {
       const headingMatch = line.match(/^-\s+(h2|h3):\s+(.+)/i);
       if (headingMatch) {
@@ -462,20 +492,30 @@ export class FallbackPageFactory {
           if (sections.length >= 3) break;
         }
         currentSection = { heading: headingMatch[2].trim(), items: [] };
-      } else if (currentSection && line.startsWith('- ')) {
-        const itemText = line.replace(/^-\s+[a-z]+:\s+/i, '').trim();
+      } else if (currentSection && line.startsWith("- ")) {
+        const itemText = line.replace(/^-\s+[a-z]+:\s+/i, "").trim();
         if (itemText && currentSection.items.length < 4) {
           currentSection.items.push(itemText);
         }
       }
     }
-    if (currentSection && currentSection.items.length > 0 && sections.length < 3) {
+    if (
+      currentSection &&
+      currentSection.items.length > 0 &&
+      sections.length < 3
+    ) {
       sections.push(currentSection);
     }
 
     if (sections.length === 0) {
-      sections.push({ heading: 'Our Features', items: ['Feature One', 'Feature Two', 'Feature Three', 'Feature Four'] });
-      sections.push({ heading: 'Why Choose Us', items: ['Reason One', 'Reason Two', 'Reason Three', 'Reason Four'] });
+      sections.push({
+        heading: "Our Features",
+        items: ["Feature One", "Feature Two", "Feature Three", "Feature Four"],
+      });
+      sections.push({
+        heading: "Why Choose Us",
+        items: ["Reason One", "Reason Two", "Reason Three", "Reason Four"],
+      });
     }
 
     const footerColumns: string[][] = [[], [], []];
@@ -483,6 +523,14 @@ export class FallbackPageFactory {
       footerColumns[i % 3].push(link);
     });
 
-    return { siteName, primaryColor, navLinks, heroHeadline, heroSubtext, sections, footerColumns };
+    return {
+      siteName,
+      primaryColor,
+      navLinks,
+      heroHeadline,
+      heroSubtext,
+      sections,
+      footerColumns,
+    };
   }
 }

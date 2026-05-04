@@ -1,4 +1,4 @@
-import type { FunctionDeclaration } from '@google/genai';
+import type { FunctionDeclaration } from "@google/genai";
 
 /** Rich result returned by tools that support vision output (e.g. scrape_website). */
 export type ToolResult = {

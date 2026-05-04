@@ -1,22 +1,26 @@
-import 'dotenv/config';
-import readline from 'node:readline';
-import { GoogleGenAI } from '@google/genai';
-import Groq from 'groq-sdk';
-import { GeminiAgent } from './providers/gemini/GeminiAgent.js';
-import { GroqAgent } from './providers/groq/GroqAgent.js';
-import { GroqJudge } from './providers/groq/GroqJudge.js';
-import type { IAgent } from './core/IAgent.js';
-import { GeminiJudge } from './providers/gemini/GeminiJudge.js';
-import { MessageHistory } from './services/MessageHistory.js';
-import { DEFAULT_MODEL_OPTION, MODEL_OPTIONS, type ModelOption } from './config/models.js';
-import { Display } from './ui/Display.js';
-import { pickModel } from './ui/ModelPicker.js';
-import { ListFilesTool } from './tools/ListFilesTool.js';
-import { ReadFileTool } from './tools/ReadFileTool.js';
-import { ScrapeWebsiteTool } from './tools/ScrapeWebsiteTool.js';
-import { ToolRegistry } from './tools/ToolRegistry.js';
-import { WebFetchTool } from './tools/WebFetchTool.js';
-import { WriteFileTool } from './tools/WriteFileTool.js';
+import "dotenv/config";
+import readline from "node:readline";
+import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
+import { GeminiAgent } from "./providers/gemini/GeminiAgent.js";
+import { GroqAgent } from "./providers/groq/GroqAgent.js";
+import { GroqJudge } from "./providers/groq/GroqJudge.js";
+import type { IAgent } from "./core/IAgent.js";
+import { GeminiJudge } from "./providers/gemini/GeminiJudge.js";
+import { MessageHistory } from "./services/MessageHistory.js";
+import {
+  DEFAULT_MODEL_OPTION,
+  MODEL_OPTIONS,
+  type ModelOption,
+} from "./config/models.js";
+import { Display } from "./ui/Display.js";
+import { pickModel } from "./ui/ModelPicker.js";
+import { ListFilesTool } from "./tools/ListFilesTool.js";
+import { ReadFileTool } from "./tools/ReadFileTool.js";
+import { ScrapeWebsiteTool } from "./tools/ScrapeWebsiteTool.js";
+import { ToolRegistry } from "./tools/ToolRegistry.js";
+import { WebFetchTool } from "./tools/WebFetchTool.js";
+import { WriteFileTool } from "./tools/WriteFileTool.js";
 
 async function main(): Promise<void> {
   const display = new Display();
@@ -29,7 +33,7 @@ async function main(): Promise<void> {
   });
   let closed = false;
 
-  rl.on('close', () => {
+  rl.on("close", () => {
     closed = true;
   });
 
@@ -51,8 +55,8 @@ async function main(): Promise<void> {
         return;
       }
 
-      if (instruction.toLowerCase() === 'exit') {
-        console.log('\n  Goodbye.\n');
+      if (instruction.toLowerCase() === "exit") {
+        console.log("\n  Goodbye.\n");
         rl.close();
         return;
       }
@@ -62,12 +66,12 @@ async function main(): Promise<void> {
       // Listen for ESC (0x1b), Ctrl+C (0x03), or 'q' to abort
       const onKeypress = (chunk: Buffer) => {
         const key = chunk.toString();
-        if (key === '\x1b' || key === '\x03' || key.toLowerCase() === 'q') {
+        if (key === "\x1b" || key === "\x03" || key.toLowerCase() === "q") {
           ac.abort();
         }
       };
 
-      process.stdin.on('data', onKeypress);
+      process.stdin.on("data", onKeypress);
       if (process.stdin.isTTY) process.stdin.setRawMode(true);
 
       try {
@@ -85,13 +89,13 @@ async function main(): Promise<void> {
           ac.signal,
         );
       } catch (error) {
-        if ((error as { name?: string }).name === 'AbortError') {
+        if ((error as { name?: string }).name === "AbortError") {
           display.interrupted();
         } else {
           display.error((error as Error).message);
         }
       } finally {
-        process.stdin.off('data', onKeypress);
+        process.stdin.off("data", onKeypress);
         if (process.stdin.isTTY) process.stdin.setRawMode(false);
       }
 
@@ -113,7 +117,7 @@ function createAgent(modelOption: ModelOption, display: Display): IAgent {
     .register(new ScrapeWebsiteTool())
     .register(new ListFilesTool());
 
-  if (modelOption.provider === 'gemini') {
+  if (modelOption.provider === "gemini") {
     const apiKey = envValue(...modelOption.apiKeyNames);
 
     if (!apiKey) {
@@ -124,7 +128,15 @@ function createAgent(modelOption: ModelOption, display: Display): IAgent {
     const history = new MessageHistory();
     const judge = new GeminiJudge(client);
 
-    return new GeminiAgent(client, history, registry, judge, display, undefined, modelOption.model);
+    return new GeminiAgent(
+      client,
+      history,
+      registry,
+      judge,
+      display,
+      undefined,
+      modelOption.model,
+    );
   }
 
   const apiKey = envValue(...modelOption.apiKeyNames);
@@ -136,7 +148,15 @@ function createAgent(modelOption: ModelOption, display: Display): IAgent {
   const client = new Groq({ apiKey });
   const judge = new GroqJudge(client);
 
-  return new GroqAgent(client, registry, judge, display, undefined, undefined, modelOption.model);
+  return new GroqAgent(
+    client,
+    registry,
+    judge,
+    display,
+    undefined,
+    undefined,
+    modelOption.model,
+  );
 }
 
 async function runWithModelRecovery(
@@ -163,11 +183,13 @@ async function runWithModelRecovery(
 
       failedModelIds.add(state.getCurrentModel().id);
 
-      const remaining = availableModelOptions().filter((m) => !failedModelIds.has(m.id));
+      const remaining = availableModelOptions().filter(
+        (m) => !failedModelIds.has(m.id),
+      );
 
       if (remaining.length === 0) {
         throw new Error(
-          'All available models have hit quota or rate limits.\n  Add more API keys in .env or wait and try again.',
+          "All available models have hit quota or rate limits.\n  Add more API keys in .env or wait and try again.",
         );
       }
 
@@ -196,24 +218,27 @@ function availableModelOptions(): ModelOption[] {
 }
 
 function isApiFailure(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const message =
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
 
   return [
-    'api call failed',
-    'api request',
-    'rate_limit',
-    'rate limit',
-    'too many requests',
-    'quota',
-    'resource_exhausted',
-    'exhausted',
-    '429',
-    '503',
-    '500',
-    'overloaded',
-    'request too large',
-    'tokens per minute',
-    'tpm',
+    "api call failed",
+    "api request",
+    "rate_limit",
+    "rate limit",
+    "too many requests",
+    "quota",
+    "resource_exhausted",
+    "exhausted",
+    "429",
+    "503",
+    "500",
+    "overloaded",
+    "request too large",
+    "tokens per minute",
+    "tpm",
   ].some((signal) => message.includes(signal));
 }
 

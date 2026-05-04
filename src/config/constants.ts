@@ -1,7 +1,7 @@
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
-export const GEMINI_JUDGE_MODEL = 'gemini-2.5-flash';
-export const DEFAULT_GROQ_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
-export const GROQ_JUDGE_MODEL = 'llama-3.3-70b-versatile';
+export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+export const GEMINI_JUDGE_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+export const GROQ_JUDGE_MODEL = "llama-3.3-70b-versatile";
 export const MAX_AGENT_STEPS = 12;
 
 export const SYSTEM_PROMPT = `You are forge-agent, an autonomous coding assistant running in a terminal.
