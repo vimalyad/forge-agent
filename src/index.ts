@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   let currentModel = DEFAULT_MODEL_OPTION;
   let agent = createAgent(currentModel, display);
 
-  console.log(`  Using ${currentModel.label} by default.\n`);
+  display.modelStatus(currentModel.label, currentModel.provider);
 
   const ask = (): void => {
     if (closed) {
@@ -57,17 +57,42 @@ async function main(): Promise<void> {
         return;
       }
 
+      const ac = new AbortController();
+
+      // Listen for ESC (0x1b), Ctrl+C (0x03), or 'q' to abort
+      const onKeypress = (chunk: Buffer) => {
+        const key = chunk.toString();
+        if (key === '\x1b' || key === '\x03' || key.toLowerCase() === 'q') {
+          ac.abort();
+        }
+      };
+
+      process.stdin.on('data', onKeypress);
+      if (process.stdin.isTTY) process.stdin.setRawMode(true);
+
       try {
-        await runWithModelRecovery(instruction, {
-          getAgent: () => agent,
-          getCurrentModel: () => currentModel,
-          setModel: (nextModel) => {
-            currentModel = nextModel;
-            agent = createAgent(currentModel, display);
+        await runWithModelRecovery(
+          instruction,
+          {
+            getAgent: () => agent,
+            getCurrentModel: () => currentModel,
+            setModel: (nextModel) => {
+              currentModel = nextModel;
+              agent = createAgent(currentModel, display);
+            },
+            display,
           },
-        });
+          ac.signal,
+        );
       } catch (error) {
-        display.error((error as Error).message);
+        if ((error as { name?: string }).name === 'AbortError') {
+          display.interrupted();
+        } else {
+          display.error((error as Error).message);
+        }
+      } finally {
+        process.stdin.off('data', onKeypress);
+        if (process.stdin.isTTY) process.stdin.setRawMode(false);
       }
 
       display.divider();
@@ -120,28 +145,50 @@ async function runWithModelRecovery(
     getAgent(): IAgent;
     getCurrentModel(): ModelOption;
     setModel(model: ModelOption): void;
+    display: Display;
   },
+  signal: AbortSignal,
 ): Promise<void> {
-  let lastError: unknown;
+  const failedModelIds = new Set<string>();
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  // Keep retrying as long as there are available models that haven't failed yet
+  for (;;) {
     try {
-      await state.getAgent().run(instruction);
+      await state.getAgent().run(instruction, signal);
       return;
     } catch (error) {
-      lastError = error;
-
-      if (!isApiFailure(error) || attempt > 0) {
+      if (!isApiFailure(error)) {
         throw error;
       }
 
-      const nextModel = await pickModel(availableModelOptions(), state.getCurrentModel().id);
+      failedModelIds.add(state.getCurrentModel().id);
+
+      const remaining = availableModelOptions().filter((m) => !failedModelIds.has(m.id));
+
+      if (remaining.length === 0) {
+        throw new Error(
+          'All available models have hit quota or rate limits.\n  Add more API keys in .env or wait and try again.',
+        );
+      }
+
+      const nextModel = await pickModel(
+        availableModelOptions(),
+        state.getCurrentModel().id,
+        failedModelIds,
+      );
+
+      // If user pressed Escape and re-selected an already-failed model, inform and re-show picker
+      if (failedModelIds.has(nextModel.id)) {
+        state.display.warn(
+          `${nextModel.label} already failed. Please pick a different model.`,
+        );
+        continue;
+      }
+
       state.setModel(nextModel);
-      console.log(`  Switched to ${nextModel.label}. Retrying...\n`);
+      state.display.switched(nextModel.label, nextModel.provider);
     }
   }
-
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 function availableModelOptions(): ModelOption[] {

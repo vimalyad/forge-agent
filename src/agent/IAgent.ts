@@ -1,3 +1,3 @@
 export interface IAgent {
-  run(userInput: string): Promise<void>;
+  run(userInput: string, signal?: AbortSignal): Promise<void>;
 }

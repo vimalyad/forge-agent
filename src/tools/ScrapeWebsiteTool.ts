@@ -1,5 +1,5 @@
 import { Type, type FunctionDeclaration } from '@google/genai';
-import type { ITool } from './ITool.js';
+import type { ITool, ToolResult } from './ITool.js';
 
 type RenderResult = {
   url: string;
@@ -7,6 +7,8 @@ type RenderResult = {
   source: 'playwright' | 'fetch';
   semanticText?: string;
   fallbackReason?: string;
+  /** PNG screenshot as base64, only present when Playwright is used. */
+  screenshotBase64?: string;
 };
 
 export class ScrapeWebsiteTool implements ITool {
@@ -28,16 +30,23 @@ export class ScrapeWebsiteTool implements ITool {
   };
 
   async execute(args: Record<string, unknown>): Promise<string> {
+    const { text } = await this.executeRich(args);
+    return text;
+  }
+
+  async executeRich(args: Record<string, unknown>): Promise<ToolResult> {
     const url = String(args.url ?? '');
     const rendered = await this.render(url);
 
-    return [
+    const text = [
       `url: ${rendered.url}`,
       `source: ${rendered.source}`,
       rendered.fallbackReason ? `fallback_reason: ${rendered.fallbackReason}` : '',
       rendered.semanticText ? `rendered_semantic_tree:\n${rendered.semanticText}` : '',
       this.cleanHtml(rendered.html),
     ].filter(Boolean).join('\n\n').slice(0, 22000);
+
+    return { text, screenshotBase64: rendered.screenshotBase64 };
   }
 
   private async render(url: string): Promise<RenderResult> {
@@ -79,20 +88,7 @@ export class ScrapeWebsiteTool implements ITool {
 
       try {
         const page = await browser.newPage();
-        await page.route('**/*', async (route: {
-          request(): { resourceType(): string };
-          abort(): Promise<void>;
-          continue(): Promise<void>;
-        }) => {
-          const resourceType = route.request().resourceType();
-
-          if (['image', 'media', 'font'].includes(resourceType)) {
-            await route.abort();
-            return;
-          }
-
-          await route.continue();
-        });
+        // Keep images enabled so the screenshot reflects the real visual layout
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
         await page.waitForTimeout(3000);
         const semanticText = await page.evaluate(() => {
@@ -128,12 +124,16 @@ export class ScrapeWebsiteTool implements ITool {
             .join('\n');
         });
 
+        const screenshotBuffer: Buffer = await page.screenshot({ fullPage: false, type: 'png' });
+        const screenshotBase64 = screenshotBuffer.toString('base64');
+
         return {
           result: {
             url,
             html: await page.content(),
             source: 'playwright',
             semanticText,
+            screenshotBase64,
           },
         };
       } finally {

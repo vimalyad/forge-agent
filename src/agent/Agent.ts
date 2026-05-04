@@ -20,10 +20,11 @@ export class Agent implements IAgent {
     private readonly model = DEFAULT_GEMINI_MODEL,
   ) {}
 
-  async run(userInput: string): Promise<void> {
+  async run(userInput: string, signal?: AbortSignal): Promise<void> {
     this.history.push({ role: 'user', parts: [{ text: userInput }] });
 
     for (let step = 1; step <= MAX_AGENT_STEPS; step += 1) {
+      if (signal?.aborted) throw Object.assign(new Error('Interrupted'), { name: 'AbortError' });
       this.display.startSpinner(`thinking step ${step}`);
 
       let response;
@@ -75,15 +76,24 @@ export class Agent implements IAgent {
       const toolResults: Part[] = [];
 
       for (const call of calls) {
+        if (signal?.aborted) throw Object.assign(new Error('Interrupted'), { name: 'AbortError' });
         const args = call.args as Record<string, unknown> | undefined;
         this.display.toolCall(call.name ?? 'unknown', args ?? {});
 
         let output: string;
         let success = true;
+        let screenshotBase64: string | undefined;
 
         try {
-          output = await this.registry.execute(call.name, args);
-          this.display.toolResult(call.name ?? 'unknown', true, output.slice(0, 100));
+          const rich = await this.registry.executeRich(call.name, args);
+          output = rich.text;
+          screenshotBase64 = rich.screenshotBase64;
+
+          if (screenshotBase64) {
+            this.display.toolResult(call.name ?? 'unknown', true, `scraped + screenshot captured (${Math.round(screenshotBase64.length * 0.75 / 1024)}kb PNG)`);
+          } else {
+            this.display.toolResult(call.name ?? 'unknown', true, output.slice(0, 100));
+          }
         } catch (error) {
           output = `Error: ${(error as Error).message}`;
           success = false;
@@ -99,12 +109,26 @@ export class Agent implements IAgent {
           }
         }
 
-        toolResults.push({
-          functionResponse: {
-            name: call.name,
-            response: { result: output },
+        const resultParts: Part[] = [
+          {
+            functionResponse: {
+              name: call.name,
+              response: { result: output },
+            },
           },
-        });
+        ];
+
+        // Attach screenshot as vision context right after the function response
+        if (screenshotBase64) {
+          resultParts.push({
+            inlineData: {
+              mimeType: 'image/png',
+              data: screenshotBase64,
+            },
+          });
+        }
+
+        toolResults.push(...resultParts);
       }
 
       const toolContent: Content = {

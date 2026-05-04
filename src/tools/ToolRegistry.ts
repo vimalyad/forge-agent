@@ -1,5 +1,5 @@
 import type { FunctionDeclaration } from '@google/genai';
-import type { ITool } from './ITool.js';
+import type { ITool, ToolResult } from './ITool.js';
 
 type JsonSchema = {
   type?: string;
@@ -53,6 +53,28 @@ export class ToolRegistry {
     }
 
     return tool.execute(args ?? {});
+  }
+
+  /** Like execute(), but returns the full ToolResult (text + optional screenshot). */
+  async executeRich(
+    name: string | undefined,
+    args: Record<string, unknown> | undefined,
+  ): Promise<ToolResult> {
+    if (!name) {
+      throw new Error('Tool call did not include a name.');
+    }
+
+    const tool = this.tools.get(name);
+
+    if (!tool) {
+      throw new Error(`Unknown tool: ${name}`);
+    }
+
+    if (tool.executeRich) {
+      return tool.executeRich(args ?? {});
+    }
+
+    return { text: await tool.execute(args ?? {}) };
   }
 
   private toJsonSchema(schema: unknown): JsonSchema {
