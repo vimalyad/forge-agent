@@ -8,6 +8,7 @@ import { OutputValidator } from '../../services/OutputValidator.js';
 import type { ToolJudge } from '../../core/ToolJudge.js';
 
 const JUDGED_TOOLS = new Set(['write_file', 'web_fetch', 'scrape_website', 'read_file']);
+const PRE_JUDGED_TOOLS = new Set(['write_file']);
 
 export class GeminiAgent implements IAgent {
   constructor(
@@ -80,19 +81,31 @@ export class GeminiAgent implements IAgent {
         const args = call.args as Record<string, unknown> | undefined;
         this.display.toolCall(call.name ?? 'unknown', args ?? {});
 
-        let output: string;
+        let output = '';
         let success = true;
         let screenshotBase64: string | undefined;
 
         try {
-          const rich = await this.registry.executeRich(call.name, args);
-          output = rich.text;
-          screenshotBase64 = rich.screenshotBase64;
+          if (call.name && PRE_JUDGED_TOOLS.has(call.name)) {
+            const preResult = await this.judge.evaluatePre(call.name, args ?? {});
+            this.display.judgePreResult(call.name, preResult.passed, preResult.reason);
 
-          if (screenshotBase64) {
-            this.display.toolResult(call.name ?? 'unknown', true, `scraped + screenshot captured (${Math.round(screenshotBase64.length * 0.75 / 1024)}kb PNG)`);
-          } else {
-            this.display.toolResult(call.name ?? 'unknown', true, output.slice(0, 100));
+            if (!preResult.passed) {
+              success = false;
+              output = `[PRE-EXECUTION JUDGE FAIL: ${preResult.reason}]`;
+            }
+          }
+
+          if (success) {
+            const rich = await this.registry.executeRich(call.name, args);
+            output = rich.text;
+            screenshotBase64 = rich.screenshotBase64;
+
+            if (screenshotBase64) {
+              this.display.toolResult(call.name ?? 'unknown', true, `scraped + screenshot captured (${Math.round(screenshotBase64.length * 0.75 / 1024)}kb PNG)`);
+            } else {
+              this.display.toolResult(call.name ?? 'unknown', true, output.slice(0, 100));
+            }
           }
         } catch (error) {
           output = `Error: ${(error as Error).message}`;

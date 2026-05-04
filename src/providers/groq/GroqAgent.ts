@@ -8,6 +8,8 @@ import { OutputValidator } from '../../services/OutputValidator.js';
 import { FallbackPageFactory } from '../../services/FallbackPageFactory.js';
 import type { ToolJudge } from '../../core/ToolJudge.js';
 
+const PRE_JUDGED_TOOLS = new Set(['write_file']);
+
 export class GroqAgent implements IAgent {
   constructor(
     private readonly client: Groq,
@@ -206,6 +208,17 @@ export class GroqAgent implements IAgent {
 
   private async tryTool(name: string, args: Record<string, unknown>): Promise<{ success: boolean; output: string }> {
     this.display.toolCall(name, args);
+
+    if (PRE_JUDGED_TOOLS.has(name)) {
+      const preResult = await this.judge.evaluatePre(name, args);
+      this.display.judgePreResult(name, preResult.passed, preResult.reason);
+
+      if (!preResult.passed) {
+        const output = `[PRE-EXECUTION JUDGE FAIL: ${preResult.reason}]`;
+        this.display.toolResult(name, false, output);
+        return { success: false, output };
+      }
+    }
 
     try {
       const output = await this.registry.execute(name, args);

@@ -33,7 +33,7 @@ export class OutputValidator {
       }
 
       if (content.length < 6000) {
-        return 'output/index.html is too thin for a high-quality Scaler clone. Add richer sections, cards, and responsive styling.';
+        return 'output/index.html is too thin for a high-quality clone. Add richer sections, content, and responsive styling.';
       }
 
       if (/[\uFFFD]/.test(content)) {
@@ -42,20 +42,6 @@ export class OutputValidator {
 
       if (/[\u{1F300}-\u{1FAFF}]/u.test(content)) {
         return 'output/index.html contains emoji. Use professional text labels or CSS instead.';
-      }
-
-      const qualitySignals = [
-        'scaler',
-        'program',
-        'mentor',
-        'placement',
-        'community',
-        'academy',
-      ];
-      const missingSignals = qualitySignals.filter((signal) => !normalizedContent.includes(signal));
-
-      if (missingSignals.length > 1) {
-        return `output/index.html lacks Scaler-specific content depth. Missing signals: ${missingSignals.join(', ')}.`;
       }
 
       return null;

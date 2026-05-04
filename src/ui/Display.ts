@@ -86,6 +86,12 @@ export class Display {
   }
 
   // ── judge result ──────────────────────────────────────────────────────────
+  judgePreResult(toolName: string, passed: boolean, reason: string): void {
+    const icon  = passed ? '✦' : '✗';
+    const color = passed ? chalk.hex('#34D399') : chalk.hex('#FBBF24');
+    console.log(`       ${color.bold(`[PRE-JUDGE ${icon}]`)}  ${chalk.hex('#94A3B8')(`Evaluating args for ${toolName}... ${reason}`)}`);
+  }
+
   judgeResult(passed: boolean, reason: string): void {
     const icon  = passed ? '✦' : '✗';
     const color = passed ? chalk.hex('#34D399') : chalk.hex('#F87171');
