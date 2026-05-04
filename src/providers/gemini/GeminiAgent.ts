@@ -196,6 +196,7 @@ export class GeminiAgent implements IAgent {
   }
 
   private async runEnhancementPass(signal?: AbortSignal): Promise<void> {
+    this.history.pruneToLast(6);
     this.display.agentMessage(
       "Injecting expert visual design critic prompt for enhancement pass...",
     );

@@ -265,13 +265,6 @@ export class GroqAgent implements IAgent {
     return result;
   }
 
-  private async executeJudgedTool(
-    name: string,
-    args: Record<string, unknown>,
-  ): Promise<string> {
-    return (await this.executeJudgedToolRich(name, args)).text;
-  }
-
   private async tryTool(
     name: string,
     args: Record<string, unknown>,

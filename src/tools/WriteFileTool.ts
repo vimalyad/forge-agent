@@ -91,7 +91,7 @@ export class WriteFileTool implements ITool {
 
     if (content.length < 6000) {
       throw new Error(
-        "output/index.html is too thin for a high-quality Scaler clone.",
+        "output/index.html is too thin for a high-quality clone. Add richer sections, content, and responsive styling.",
       );
     }
 

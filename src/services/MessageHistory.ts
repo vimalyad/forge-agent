@@ -14,4 +14,10 @@ export class MessageHistory {
   clear(): void {
     this.messages = [];
   }
+
+  pruneToLast(n: number): void {
+    if (this.messages.length > n) {
+      this.messages = this.messages.slice(-n);
+    }
+  }
 }
