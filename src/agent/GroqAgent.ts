@@ -1,5 +1,5 @@
 import Groq from 'groq-sdk';
-import { GROQ_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../config/constants.js';
+import { DEFAULT_GROQ_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../config/constants.js';
 import type { Display } from '../ui/Display.js';
 import type { ToolRegistry } from '../tools/ToolRegistry.js';
 import type { IAgent } from './IAgent.js';
@@ -15,6 +15,7 @@ export class GroqAgent implements IAgent {
     private readonly display: Display,
     private readonly outputValidator = new OutputValidator(),
     private readonly scalerPageFactory = new ScalerPageFactory(),
+    private readonly model = DEFAULT_GROQ_MODEL,
   ) {}
 
   async run(userInput: string): Promise<void> {
@@ -110,7 +111,7 @@ export class GroqAgent implements IAgent {
 
   private async generateHtml(userInput: string, blueprint: string, correction: string): Promise<string> {
     const response = await this.client.chat.completions.create({
-      model: GROQ_MODEL,
+      model: this.model,
       max_completion_tokens: 8192,
       temperature: 0.25,
       messages: [

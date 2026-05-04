@@ -24,20 +24,15 @@ GROQ_API_KEY="your-key"
 npm start
 ```
 
-Choose a provider:
-
-```text
-1. Gemini
-2. Groq
-```
-
-Then enter:
+The CLI starts with Gemini 2.5 Flash by default. Enter:
 
 ```text
 Clone the Scaler Academy website and generate output/index.html with a header, hero section, and footer
 ```
 
-The agent scrapes the live Scaler website into a compact semantic blueprint, loops through tool calls, writes real files, judges tool output, and returns to the CLI prompt when complete. If Playwright Chromium is installed, the scraper renders the page before extracting the semantic tree; otherwise it falls back to plain fetch and prints the fallback reason.
+The agent scrapes the live Scaler website into a compact semantic blueprint, loops through tool calls, writes real files, judges tool output, and returns to the CLI prompt when complete. If an API request fails, the CLI opens an arrow-key model picker so you can switch models and retry without restarting.
+
+If Playwright Chromium is installed, the scraper renders the page before extracting the semantic tree; otherwise it falls back to plain fetch and prints the fallback reason.
 
 ## Build
 

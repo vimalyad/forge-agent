@@ -8,15 +8,15 @@ import { GroqJudgeAgent } from './agent/GroqJudgeAgent.js';
 import type { IAgent } from './agent/IAgent.js';
 import { JudgeAgent } from './agent/JudgeAgent.js';
 import { MessageHistory } from './agent/MessageHistory.js';
+import { DEFAULT_MODEL_OPTION, MODEL_OPTIONS, type ModelOption } from './config/models.js';
 import { Display } from './ui/Display.js';
+import { pickModel } from './ui/ModelPicker.js';
 import { ListFilesTool } from './tools/ListFilesTool.js';
 import { ReadFileTool } from './tools/ReadFileTool.js';
 import { ScrapeWebsiteTool } from './tools/ScrapeWebsiteTool.js';
 import { ToolRegistry } from './tools/ToolRegistry.js';
 import { WebFetchTool } from './tools/WebFetchTool.js';
 import { WriteFileTool } from './tools/WriteFileTool.js';
-
-type Provider = 'gemini' | 'groq';
 
 async function main(): Promise<void> {
   const display = new Display();
@@ -33,10 +33,10 @@ async function main(): Promise<void> {
     closed = true;
   });
 
-  const provider = await chooseProvider(rl);
-  const agent = createAgent(provider, display);
+  let currentModel = DEFAULT_MODEL_OPTION;
+  let agent = createAgent(currentModel, display);
 
-  console.log(`\n  Using ${provider}.\n`);
+  console.log(`  Using ${currentModel.label} by default.\n`);
 
   const ask = (): void => {
     if (closed) {
@@ -58,7 +58,14 @@ async function main(): Promise<void> {
       }
 
       try {
-        await agent.run(instruction);
+        await runWithModelRecovery(instruction, {
+          getAgent: () => agent,
+          getCurrentModel: () => currentModel,
+          setModel: (nextModel) => {
+            currentModel = nextModel;
+            agent = createAgent(currentModel, display);
+          },
+        });
       } catch (error) {
         display.error((error as Error).message);
       }
@@ -73,7 +80,7 @@ async function main(): Promise<void> {
   ask();
 }
 
-function createAgent(provider: Provider, display: Display): IAgent {
+function createAgent(modelOption: ModelOption, display: Display): IAgent {
   const registry = new ToolRegistry()
     .register(new WriteFileTool())
     .register(new ReadFileTool())
@@ -81,53 +88,86 @@ function createAgent(provider: Provider, display: Display): IAgent {
     .register(new ScrapeWebsiteTool())
     .register(new ListFilesTool());
 
-  if (provider === 'gemini') {
-    const apiKey = envValue('GEMINI_API_KEY', 'gemini_api_key');
+  if (modelOption.provider === 'gemini') {
+    const apiKey = envValue(...modelOption.apiKeyNames);
 
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not set in .env.');
+      throw new Error(`${modelOption.apiKeyNames[0]} is not set in .env.`);
     }
 
     const client = new GoogleGenAI({ apiKey });
     const history = new MessageHistory();
     const judge = new JudgeAgent(client);
 
-    return new Agent(client, history, registry, judge, display);
+    return new Agent(client, history, registry, judge, display, undefined, modelOption.model);
   }
 
-  const apiKey = envValue('GROQ_API_KEY', 'groq_api_key');
+  const apiKey = envValue(...modelOption.apiKeyNames);
 
   if (!apiKey) {
-    throw new Error('GROQ_API_KEY is not set in .env.');
+    throw new Error(`${modelOption.apiKeyNames[0]} is not set in .env.`);
   }
 
   const client = new Groq({ apiKey });
   const judge = new GroqJudgeAgent(client);
 
-  return new GroqAgent(client, registry, judge, display);
+  return new GroqAgent(client, registry, judge, display, undefined, undefined, modelOption.model);
 }
 
-async function chooseProvider(rl: readline.Interface): Promise<Provider> {
-  while (true) {
-    const answer = await question(rl, '  Choose model provider:\n  1. Gemini\n  2. Groq\n  provider > ');
-    const normalized = answer.trim().toLowerCase();
+async function runWithModelRecovery(
+  instruction: string,
+  state: {
+    getAgent(): IAgent;
+    getCurrentModel(): ModelOption;
+    setModel(model: ModelOption): void;
+  },
+): Promise<void> {
+  let lastError: unknown;
 
-    if (normalized === '1' || normalized === 'gemini') {
-      return 'gemini';
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await state.getAgent().run(instruction);
+      return;
+    } catch (error) {
+      lastError = error;
+
+      if (!isApiFailure(error) || attempt > 0) {
+        throw error;
+      }
+
+      const nextModel = await pickModel(availableModelOptions(), state.getCurrentModel().id);
+      state.setModel(nextModel);
+      console.log(`  Switched to ${nextModel.label}. Retrying...\n`);
     }
-
-    if (normalized === '2' || normalized === 'groq') {
-      return 'groq';
-    }
-
-    console.log('\n  Please choose 1 for Gemini or 2 for Groq.\n');
   }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-function question(rl: readline.Interface, prompt: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(prompt, resolve);
-  });
+function availableModelOptions(): ModelOption[] {
+  return MODEL_OPTIONS.filter((option) => envValue(...option.apiKeyNames));
+}
+
+function isApiFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+  return [
+    'api call failed',
+    'api request',
+    'rate_limit',
+    'rate limit',
+    'too many requests',
+    'quota',
+    'resource_exhausted',
+    'exhausted',
+    '429',
+    '503',
+    '500',
+    'overloaded',
+    'request too large',
+    'tokens per minute',
+    'tpm',
+  ].some((signal) => message.includes(signal));
 }
 
 function envValue(...names: string[]): string | undefined {

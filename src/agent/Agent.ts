@@ -1,5 +1,5 @@
 import type { Content, GoogleGenAI, Part } from '@google/genai';
-import { GEMINI_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../config/constants.js';
+import { DEFAULT_GEMINI_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../config/constants.js';
 import type { Display } from '../ui/Display.js';
 import type { ToolRegistry } from '../tools/ToolRegistry.js';
 import type { IAgent } from './IAgent.js';
@@ -17,6 +17,7 @@ export class Agent implements IAgent {
     private readonly judge: ToolJudge,
     private readonly display: Display,
     private readonly outputValidator = new OutputValidator(),
+    private readonly model = DEFAULT_GEMINI_MODEL,
   ) {}
 
   async run(userInput: string): Promise<void> {
@@ -29,7 +30,7 @@ export class Agent implements IAgent {
 
       try {
         response = await this.client.models.generateContent({
-          model: GEMINI_MODEL,
+          model: this.model,
           contents: this.history.all(),
           config: {
             systemInstruction: SYSTEM_PROMPT,
