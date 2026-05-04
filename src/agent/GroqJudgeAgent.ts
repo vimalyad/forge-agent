@@ -1,0 +1,30 @@
+import Groq from 'groq-sdk';
+import { GROQ_JUDGE_MODEL } from '../config/constants.js';
+import type { ToolJudge } from './ToolJudge.js';
+
+const JUDGE_PROMPT = `You are a strict CLI-agent judge.
+Given a tool name and its output, respond with exactly one line:
+PASS: <brief reason>
+or
+FAIL: <brief reason>
+Pass useful file writes, successful fetches or scrapes, and meaningful file reads. Fail empty, irrelevant, or error output.`;
+
+export class GroqJudgeAgent implements ToolJudge {
+  constructor(private readonly client: Groq) {}
+
+  async evaluate(toolName: string, toolOutput: string): Promise<{ passed: boolean; reason: string }> {
+    const response = await this.client.chat.completions.create({
+      model: GROQ_JUDGE_MODEL,
+      messages: [
+        { role: 'system', content: JUDGE_PROMPT },
+        { role: 'user', content: `Tool: ${toolName}\nOutput:\n${toolOutput.slice(0, 3000)}` },
+      ],
+    });
+
+    const text = response.choices[0]?.message.content?.trim() ?? '';
+    const passed = text.toUpperCase().startsWith('PASS');
+    const reason = text.replace(/^(PASS|FAIL):\s*/i, '') || 'No judge reason returned.';
+
+    return { passed, reason };
+  }
+}

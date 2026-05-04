@@ -1,18 +1,19 @@
 import type { Content, GoogleGenAI, Part } from '@google/genai';
-import { MAX_AGENT_STEPS, MODEL, SYSTEM_PROMPT } from '../config/constants.js';
+import { GEMINI_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../config/constants.js';
 import type { Display } from '../ui/Display.js';
 import type { ToolRegistry } from '../tools/ToolRegistry.js';
-import type { JudgeAgent } from './JudgeAgent.js';
+import type { IAgent } from './IAgent.js';
 import type { MessageHistory } from './MessageHistory.js';
+import type { ToolJudge } from './ToolJudge.js';
 
-const JUDGED_TOOLS = new Set(['write_file', 'web_fetch', 'read_file']);
+const JUDGED_TOOLS = new Set(['write_file', 'web_fetch', 'scrape_website', 'read_file']);
 
-export class Agent {
+export class Agent implements IAgent {
   constructor(
     private readonly client: GoogleGenAI,
     private readonly history: MessageHistory,
     private readonly registry: ToolRegistry,
-    private readonly judge: JudgeAgent,
+    private readonly judge: ToolJudge,
     private readonly display: Display,
   ) {}
 
@@ -26,7 +27,7 @@ export class Agent {
 
       try {
         response = await this.client.models.generateContent({
-          model: MODEL,
+          model: GEMINI_MODEL,
           contents: this.history.all(),
           config: {
             systemInstruction: SYSTEM_PROMPT,
