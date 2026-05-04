@@ -1,4 +1,4 @@
-export class ScalerPageFactory {
+export class FallbackPageFactory {
   create(blueprint: string): string {
     const details = this.extractDetails(blueprint);
 

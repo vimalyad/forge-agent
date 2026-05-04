@@ -1,12 +1,12 @@
 import Groq from 'groq-sdk';
 import type { ChatCompletionContentPart } from 'groq-sdk/resources/chat/completions.js';
-import { DEFAULT_GROQ_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../config/constants.js';
-import type { Display } from '../ui/Display.js';
-import type { ToolRegistry } from '../tools/ToolRegistry.js';
-import type { IAgent } from './IAgent.js';
-import { OutputValidator } from './OutputValidator.js';
-import { ScalerPageFactory } from './ScalerPageFactory.js';
-import type { ToolJudge } from './ToolJudge.js';
+import { DEFAULT_GROQ_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../../config/constants.js';
+import type { Display } from '../../ui/Display.js';
+import type { ToolRegistry } from '../../tools/ToolRegistry.js';
+import type { IAgent } from '../../core/IAgent.js';
+import { OutputValidator } from '../../services/OutputValidator.js';
+import { FallbackPageFactory } from '../../services/FallbackPageFactory.js';
+import type { ToolJudge } from '../../core/ToolJudge.js';
 
 export class GroqAgent implements IAgent {
   constructor(
@@ -15,7 +15,7 @@ export class GroqAgent implements IAgent {
     private readonly judge: ToolJudge,
     private readonly display: Display,
     private readonly outputValidator = new OutputValidator(),
-    private readonly scalerPageFactory = new ScalerPageFactory(),
+    private readonly fallbackPageFactory = new FallbackPageFactory(),
     private readonly model = DEFAULT_GROQ_MODEL,
   ) {}
 
@@ -89,7 +89,7 @@ export class GroqAgent implements IAgent {
   }
 
   private async writeFallbackPage(blueprint: string): Promise<void> {
-    const html = this.scalerPageFactory.create(blueprint);
+    const html = this.fallbackPageFactory.create(blueprint);
     const writeResult = await this.tryTool('write_file', {
       path: 'output/index.html',
       content: html,

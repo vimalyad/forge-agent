@@ -1,15 +1,15 @@
 import type { Content, GoogleGenAI, Part } from '@google/genai';
-import { DEFAULT_GEMINI_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../config/constants.js';
-import type { Display } from '../ui/Display.js';
-import type { ToolRegistry } from '../tools/ToolRegistry.js';
-import type { IAgent } from './IAgent.js';
-import type { MessageHistory } from './MessageHistory.js';
-import { OutputValidator } from './OutputValidator.js';
-import type { ToolJudge } from './ToolJudge.js';
+import { DEFAULT_GEMINI_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../../config/constants.js';
+import type { Display } from '../../ui/Display.js';
+import type { ToolRegistry } from '../../tools/ToolRegistry.js';
+import type { IAgent } from '../../core/IAgent.js';
+import type { MessageHistory } from '../../services/MessageHistory.js';
+import { OutputValidator } from '../../services/OutputValidator.js';
+import type { ToolJudge } from '../../core/ToolJudge.js';
 
 const JUDGED_TOOLS = new Set(['write_file', 'web_fetch', 'scrape_website', 'read_file']);
 
-export class Agent implements IAgent {
+export class GeminiAgent implements IAgent {
   constructor(
     private readonly client: GoogleGenAI,
     private readonly history: MessageHistory,

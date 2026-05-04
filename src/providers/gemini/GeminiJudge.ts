@@ -1,6 +1,6 @@
 import type { GoogleGenAI } from '@google/genai';
-import { GEMINI_JUDGE_MODEL } from '../config/constants.js';
-import type { ToolJudge } from './ToolJudge.js';
+import { GEMINI_JUDGE_MODEL } from '../../config/constants.js';
+import type { ToolJudge } from '../../core/ToolJudge.js';
 
 const JUDGE_PROMPT = `You are a strict CLI-agent judge.
 Given a tool name and its output, respond with exactly one line:
@@ -9,7 +9,7 @@ or
 FAIL: <brief reason>
 Pass useful file writes, successful web fetches, and meaningful file reads. Fail empty, irrelevant, or error output.`;
 
-export class JudgeAgent implements ToolJudge {
+export class GeminiJudge implements ToolJudge {
   constructor(private readonly client: GoogleGenAI) {}
 
   async evaluate(toolName: string, toolOutput: string): Promise<{ passed: boolean; reason: string }> {

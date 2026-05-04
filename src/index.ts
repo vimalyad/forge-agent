@@ -2,12 +2,12 @@ import 'dotenv/config';
 import readline from 'node:readline';
 import { GoogleGenAI } from '@google/genai';
 import Groq from 'groq-sdk';
-import { Agent } from './agent/Agent.js';
-import { GroqAgent } from './agent/GroqAgent.js';
-import { GroqJudgeAgent } from './agent/GroqJudgeAgent.js';
-import type { IAgent } from './agent/IAgent.js';
-import { JudgeAgent } from './agent/JudgeAgent.js';
-import { MessageHistory } from './agent/MessageHistory.js';
+import { GeminiAgent } from './providers/gemini/GeminiAgent.js';
+import { GroqAgent } from './providers/groq/GroqAgent.js';
+import { GroqJudge } from './providers/groq/GroqJudge.js';
+import type { IAgent } from './core/IAgent.js';
+import { GeminiJudge } from './providers/gemini/GeminiJudge.js';
+import { MessageHistory } from './services/MessageHistory.js';
 import { DEFAULT_MODEL_OPTION, MODEL_OPTIONS, type ModelOption } from './config/models.js';
 import { Display } from './ui/Display.js';
 import { pickModel } from './ui/ModelPicker.js';
@@ -122,9 +122,9 @@ function createAgent(modelOption: ModelOption, display: Display): IAgent {
 
     const client = new GoogleGenAI({ apiKey });
     const history = new MessageHistory();
-    const judge = new JudgeAgent(client);
+    const judge = new GeminiJudge(client);
 
-    return new Agent(client, history, registry, judge, display, undefined, modelOption.model);
+    return new GeminiAgent(client, history, registry, judge, display, undefined, modelOption.model);
   }
 
   const apiKey = envValue(...modelOption.apiKeyNames);
@@ -134,7 +134,7 @@ function createAgent(modelOption: ModelOption, display: Display): IAgent {
   }
 
   const client = new Groq({ apiKey });
-  const judge = new GroqJudgeAgent(client);
+  const judge = new GroqJudge(client);
 
   return new GroqAgent(client, registry, judge, display, undefined, undefined, modelOption.model);
 }

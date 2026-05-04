@@ -1,6 +1,6 @@
 import Groq from 'groq-sdk';
-import { GROQ_JUDGE_MODEL } from '../config/constants.js';
-import type { ToolJudge } from './ToolJudge.js';
+import { GROQ_JUDGE_MODEL } from '../../config/constants.js';
+import type { ToolJudge } from '../../core/ToolJudge.js';
 
 const JUDGE_PROMPT = `You are a strict CLI-agent judge.
 Given a tool name and its output, respond with exactly one line:
@@ -9,7 +9,7 @@ or
 FAIL: <brief reason>
 Pass useful file writes, successful fetches or scrapes, and meaningful file reads. Fail empty, irrelevant, or error output.`;
 
-export class GroqJudgeAgent implements ToolJudge {
+export class GroqJudge implements ToolJudge {
   constructor(private readonly client: Groq) {}
 
   async evaluate(toolName: string, toolOutput: string): Promise<{ passed: boolean; reason: string }> {

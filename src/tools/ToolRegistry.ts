@@ -1,5 +1,5 @@
 import type { FunctionDeclaration } from '@google/genai';
-import type { ITool, ToolResult } from './ITool.js';
+import type { ITool, ToolResult } from '../core/ITool.js';
 
 type JsonSchema = {
   type?: string;

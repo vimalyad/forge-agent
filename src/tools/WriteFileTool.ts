@@ -1,7 +1,7 @@
 import { Type, type FunctionDeclaration } from '@google/genai';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { ITool } from './ITool.js';
+import type { ITool } from '../core/ITool.js';
 import { resolveWorkspacePath } from './PathGuard.js';
 
 export class WriteFileTool implements ITool {
