@@ -4,6 +4,7 @@ import type { Display } from '../ui/Display.js';
 import type { ToolRegistry } from '../tools/ToolRegistry.js';
 import type { IAgent } from './IAgent.js';
 import type { MessageHistory } from './MessageHistory.js';
+import { OutputValidator } from './OutputValidator.js';
 import type { ToolJudge } from './ToolJudge.js';
 
 const JUDGED_TOOLS = new Set(['write_file', 'web_fetch', 'scrape_website', 'read_file']);
@@ -15,6 +16,7 @@ export class Agent implements IAgent {
     private readonly registry: ToolRegistry,
     private readonly judge: ToolJudge,
     private readonly display: Display,
+    private readonly outputValidator = new OutputValidator(),
   ) {}
 
   async run(userInput: string): Promise<void> {
@@ -56,7 +58,17 @@ export class Agent implements IAgent {
       const calls = response.functionCalls;
 
       if (!calls?.length) {
-        return;
+        const validationError = await this.outputValidator.validate();
+
+        if (!validationError) {
+          return;
+        }
+
+        this.history.push({
+          role: 'user',
+          parts: [{ text: `Final output validation failed: ${validationError} Continue and fix output/index.html before claiming completion.` }],
+        });
+        continue;
       }
 
       const toolResults: Part[] = [];

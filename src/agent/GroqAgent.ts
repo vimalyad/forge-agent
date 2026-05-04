@@ -3,54 +3,30 @@ import { GROQ_MODEL, MAX_AGENT_STEPS, SYSTEM_PROMPT } from '../config/constants.
 import type { Display } from '../ui/Display.js';
 import type { ToolRegistry } from '../tools/ToolRegistry.js';
 import type { IAgent } from './IAgent.js';
+import { OutputValidator } from './OutputValidator.js';
 import type { ToolJudge } from './ToolJudge.js';
 
-type GroqMessage = {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content?: string | null;
-  tool_calls?: Array<{
-    id: string;
-    type: 'function';
-    function: {
-      name: string;
-      arguments: string;
-    };
-  }>;
-  tool_call_id?: string;
-};
-
-const JUDGED_TOOLS = new Set(['write_file', 'web_fetch', 'scrape_website', 'read_file']);
-
 export class GroqAgent implements IAgent {
-  private readonly messages: GroqMessage[] = [
-    {
-      role: 'system',
-      content: SYSTEM_PROMPT,
-    },
-  ];
-
   constructor(
     private readonly client: Groq,
     private readonly registry: ToolRegistry,
     private readonly judge: ToolJudge,
     private readonly display: Display,
+    private readonly outputValidator = new OutputValidator(),
   ) {}
 
   async run(userInput: string): Promise<void> {
-    this.messages.push({ role: 'user', content: userInput });
+    const url = this.extractUrl(userInput) ?? 'https://www.scaler.com';
+    const blueprint = await this.executeJudgedTool('scrape_website', { url });
+    let correction = '';
 
     for (let step = 1; step <= MAX_AGENT_STEPS; step += 1) {
       this.display.startSpinner(`thinking step ${step}`);
 
-      let response;
+      let html: string;
 
       try {
-        response = await this.client.chat.completions.create({
-          model: GROQ_MODEL,
-          messages: this.messages as never,
-          tools: this.registry.groqTools() as never,
-          tool_choice: 'auto',
-        });
+        html = await this.generateHtml(userInput, blueprint, correction);
       } catch (error) {
         this.display.stopSpinner(false, 'API call failed');
         throw error;
@@ -58,68 +34,102 @@ export class GroqAgent implements IAgent {
 
       this.display.stopSpinner(true);
 
-      const message = response.choices[0]?.message;
-
-      if (!message) {
-        throw new Error('Groq returned no message.');
-      }
-
-      this.messages.push({
-        role: 'assistant',
-        content: message.content ?? null,
-        tool_calls: message.tool_calls as GroqMessage['tool_calls'],
+      const writeResult = await this.tryTool('write_file', {
+        path: 'output/index.html',
+        content: html,
       });
 
-      if (message.content) {
-        this.display.agentMessage(message.content);
+      if (!writeResult.success) {
+        correction = writeResult.output;
+        continue;
       }
 
-      if (!message.tool_calls?.length) {
+      await this.judgeTool('write_file', writeResult.output);
+      const readResult = await this.tryTool('read_file', { path: 'output/index.html' });
+
+      if (!readResult.success) {
+        correction = readResult.output;
+        continue;
+      }
+
+      await this.judgeTool('read_file', readResult.output);
+
+      const validationError = await this.outputValidator.validate();
+
+      if (!validationError) {
+        this.display.agentMessage('Generated output/index.html with a header, hero section, footer, embedded CSS, and JavaScript.');
         return;
       }
 
-      for (const call of message.tool_calls) {
-        const args = this.parseArgs(call.function.arguments);
-        this.display.toolCall(call.function.name, args);
-
-        let output: string;
-        let success = true;
-
-        try {
-          output = await this.registry.execute(call.function.name, args);
-          this.display.toolResult(call.function.name, true, output.slice(0, 100));
-        } catch (error) {
-          output = `Error: ${(error as Error).message}`;
-          success = false;
-          this.display.toolResult(call.function.name, false, output);
-        }
-
-        if (success && JUDGED_TOOLS.has(call.function.name)) {
-          const result = await this.judge.evaluate(call.function.name, output);
-          this.display.judgeResult(result.passed, result.reason);
-
-          if (!result.passed) {
-            output = `${output}\n\n[JUDGE FAIL: ${result.reason}]`;
-          }
-        }
-
-        this.messages.push({
-          role: 'tool',
-          tool_call_id: call.id,
-          content: output,
-        });
-      }
+      correction = validationError;
     }
 
-    throw new Error(`Agent reached ${MAX_AGENT_STEPS} steps without finishing.`);
+    throw new Error(`Groq agent reached ${MAX_AGENT_STEPS} steps without producing a valid output/index.html.`);
   }
 
-  private parseArgs(rawArgs: string): Record<string, unknown> {
-    try {
-      const parsed = JSON.parse(rawArgs);
-      return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
-    } catch {
-      return {};
+  private async generateHtml(userInput: string, blueprint: string, correction: string): Promise<string> {
+    const response = await this.client.chat.completions.create({
+      model: GROQ_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: `${SYSTEM_PROMPT}\nReturn only the complete HTML document. Do not use Markdown fences.`,
+        },
+        {
+          role: 'user',
+          content: [
+            userInput,
+            '',
+            'Cleaned website blueprint:',
+            blueprint,
+            correction ? `Previous validation error: ${correction}` : '',
+          ].join('\n'),
+        },
+      ],
+    });
+
+    return this.extractHtml(response.choices[0]?.message.content ?? '');
+  }
+
+  private async executeJudgedTool(name: string, args: Record<string, unknown>): Promise<string> {
+    const result = await this.tryTool(name, args);
+
+    if (!result.success) {
+      throw new Error(result.output);
     }
+
+    await this.judgeTool(name, result.output);
+    return result.output;
+  }
+
+  private async tryTool(name: string, args: Record<string, unknown>): Promise<{ success: boolean; output: string }> {
+    this.display.toolCall(name, args);
+
+    try {
+      const output = await this.registry.execute(name, args);
+      this.display.toolResult(name, true, output.slice(0, 100));
+      return { success: true, output };
+    } catch (error) {
+      const output = `Error: ${(error as Error).message}`;
+      this.display.toolResult(name, false, output);
+      return { success: false, output };
+    }
+  }
+
+  private async judgeTool(name: string, output: string): Promise<void> {
+    const result = await this.judge.evaluate(name, output);
+    this.display.judgeResult(result.passed, result.reason);
+  }
+
+  private extractHtml(text: string): string {
+    const fenced = text.match(/```(?:html)?\s*([\s\S]*?)```/i)?.[1];
+    const candidate = fenced ?? text;
+    const start = candidate.search(/<!doctype html>|<html/i);
+
+    return start >= 0 ? candidate.slice(start).trim() : candidate.trim();
+  }
+
+  private extractUrl(text: string): string | null {
+    return text.match(/https?:\/\/[^\s)]+/i)?.[0] ?? null;
   }
 }

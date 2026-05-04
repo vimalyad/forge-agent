@@ -1,7 +1,7 @@
 export const GEMINI_MODEL = 'gemini-2.5-flash';
 export const GEMINI_JUDGE_MODEL = 'gemini-2.5-flash';
-export const GROQ_MODEL = 'llama-3.3-70b-versatile';
-export const GROQ_JUDGE_MODEL = 'llama-3.3-70b-versatile';
+export const GROQ_MODEL = 'openai/gpt-oss-20b';
+export const GROQ_JUDGE_MODEL = 'openai/gpt-oss-20b';
 export const MAX_AGENT_STEPS = 12;
 
 export const SYSTEM_PROMPT = `You are forge-agent, an autonomous coding assistant running in a terminal.
@@ -17,4 +17,6 @@ Requirements:
 7. Use read_file to review generated work before the final answer.
 8. Keep generated files inside output/.
 9. Use the cleaned semantic scrape as the blueprint and avoid copying tracking scripts or unrelated page noise.
-10. Explain completed steps briefly when done.`;
+10. Never write placeholders such as <updated_html_content>, <scrape_result>, TODO, or "content goes here".
+11. Do not claim completion until output/index.html has real complete HTML with header, hero, footer, style, and script tags.
+12. Explain completed steps briefly when done.`;
