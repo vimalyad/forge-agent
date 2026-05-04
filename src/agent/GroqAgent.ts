@@ -4,6 +4,7 @@ import type { Display } from '../ui/Display.js';
 import type { ToolRegistry } from '../tools/ToolRegistry.js';
 import type { IAgent } from './IAgent.js';
 import { OutputValidator } from './OutputValidator.js';
+import { ScalerPageFactory } from './ScalerPageFactory.js';
 import type { ToolJudge } from './ToolJudge.js';
 
 export class GroqAgent implements IAgent {
@@ -13,6 +14,7 @@ export class GroqAgent implements IAgent {
     private readonly judge: ToolJudge,
     private readonly display: Display,
     private readonly outputValidator = new OutputValidator(),
+    private readonly scalerPageFactory = new ScalerPageFactory(),
   ) {}
 
   async run(userInput: string): Promise<void> {
@@ -41,6 +43,12 @@ export class GroqAgent implements IAgent {
 
       if (!writeResult.success) {
         correction = writeResult.output;
+
+        if (step >= 3) {
+          await this.writeFallbackPage(blueprint);
+          return;
+        }
+
         continue;
       }
 
@@ -62,18 +70,61 @@ export class GroqAgent implements IAgent {
       }
 
       correction = validationError;
+
+      if (step >= 3) {
+        await this.writeFallbackPage(blueprint);
+        return;
+      }
     }
 
     throw new Error(`Groq agent reached ${MAX_AGENT_STEPS} steps without producing a valid output/index.html.`);
   }
 
+  private async writeFallbackPage(blueprint: string): Promise<void> {
+    const html = this.scalerPageFactory.create(blueprint);
+    const writeResult = await this.tryTool('write_file', {
+      path: 'output/index.html',
+      content: html,
+    });
+
+    if (!writeResult.success) {
+      throw new Error(writeResult.output);
+    }
+
+    await this.judgeTool('write_file', writeResult.output);
+    const readResult = await this.tryTool('read_file', { path: 'output/index.html' });
+
+    if (!readResult.success) {
+      throw new Error(readResult.output);
+    }
+
+    await this.judgeTool('read_file', readResult.output);
+    const validationError = await this.outputValidator.validate();
+
+    if (validationError) {
+      throw new Error(validationError);
+    }
+
+    this.display.agentMessage('Generated output/index.html with a rendered scrape and a polished Scaler-style fallback page.');
+  }
+
   private async generateHtml(userInput: string, blueprint: string, correction: string): Promise<string> {
     const response = await this.client.chat.completions.create({
       model: GROQ_MODEL,
+      max_completion_tokens: 8192,
+      temperature: 0.25,
       messages: [
         {
           role: 'system',
-          content: `${SYSTEM_PROMPT}\nReturn only the complete HTML document. Do not use Markdown fences.`,
+          content: [
+            SYSTEM_PROMPT,
+            'Return only the complete HTML document. Do not use Markdown fences.',
+            'Write at least 6500 characters of real HTML/CSS/JS.',
+            'Use a strong Scaler-like visual system: #0057ff blue, deep navy, white cards, compact professional sections, and clear CTAs.',
+            'Include header, hero, stats strip, programs section, mentor/community/placement section, and footer.',
+            'Use CSS gradients, layout, and cards instead of external stock images.',
+            'Use plain text social labels instead of emoji.',
+          ].join('\n'),
         },
         {
           role: 'user',
@@ -81,7 +132,7 @@ export class GroqAgent implements IAgent {
             userInput,
             '',
             'Cleaned website blueprint:',
-            blueprint,
+            this.compactBlueprint(blueprint),
             correction ? `Previous validation error: ${correction}` : '',
           ].join('\n'),
         },
@@ -131,5 +182,40 @@ export class GroqAgent implements IAgent {
 
   private extractUrl(text: string): string | null {
     return text.match(/https?:\/\/[^\s)]+/i)?.[0] ?? null;
+  }
+
+  private compactBlueprint(blueprint: string): string {
+    const importantLines = blueprint
+      .split('\n')
+      .filter((line) => {
+        const normalizedLine = line.toLowerCase();
+
+        return [
+          'source:',
+          'title:',
+          'description:',
+          'h1:',
+          'h2:',
+          'h3:',
+          'header',
+          'nav',
+          'hero',
+          'program',
+          'mentor',
+          'placement',
+          'community',
+          'callback',
+          'book free',
+          'why scaler',
+          'footer',
+          'modern software',
+          'data science',
+          'devops',
+          'advanced ai',
+        ].some((signal) => normalizedLine.includes(signal));
+      });
+
+    const compact = importantLines.join('\n').replace(/\n{3,}/g, '\n\n');
+    return (compact || blueprint).slice(0, 6500);
   }
 }

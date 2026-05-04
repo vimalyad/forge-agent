@@ -5,6 +5,8 @@ type RenderResult = {
   url: string;
   html: string;
   source: 'playwright' | 'fetch';
+  semanticText?: string;
+  fallbackReason?: string;
 };
 
 export class ScrapeWebsiteTool implements ITool {
@@ -32,8 +34,10 @@ export class ScrapeWebsiteTool implements ITool {
     return [
       `url: ${rendered.url}`,
       `source: ${rendered.source}`,
+      rendered.fallbackReason ? `fallback_reason: ${rendered.fallbackReason}` : '',
+      rendered.semanticText ? `rendered_semantic_tree:\n${rendered.semanticText}` : '',
       this.cleanHtml(rendered.html),
-    ].join('\n\n').slice(0, 16000);
+    ].filter(Boolean).join('\n\n').slice(0, 22000);
   }
 
   private async render(url: string): Promise<RenderResult> {
@@ -45,8 +49,8 @@ export class ScrapeWebsiteTool implements ITool {
 
     const playwrightResult = await this.tryPlaywright(parsedUrl.toString());
 
-    if (playwrightResult) {
-      return playwrightResult;
+    if (playwrightResult.result) {
+      return playwrightResult.result;
     }
 
     const response = await fetch(parsedUrl, {
@@ -63,10 +67,11 @@ export class ScrapeWebsiteTool implements ITool {
       url: parsedUrl.toString(),
       html: await response.text(),
       source: 'fetch',
+      fallbackReason: playwrightResult.reason,
     };
   }
 
-  private async tryPlaywright(url: string): Promise<RenderResult | null> {
+  private async tryPlaywright(url: string): Promise<{ result: RenderResult | null; reason?: string }> {
     try {
       const moduleName = 'playwright';
       const playwright = await import(moduleName);
@@ -74,18 +79,71 @@ export class ScrapeWebsiteTool implements ITool {
 
       try {
         const page = await browser.newPage();
-        await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+        await page.route('**/*', async (route: {
+          request(): { resourceType(): string };
+          abort(): Promise<void>;
+          continue(): Promise<void>;
+        }) => {
+          const resourceType = route.request().resourceType();
+
+          if (['image', 'media', 'font'].includes(resourceType)) {
+            await route.abort();
+            return;
+          }
+
+          await route.continue();
+        });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        await page.waitForTimeout(3000);
+        const semanticText = await page.evaluate(() => {
+          const selector = [
+            'header',
+            'nav',
+            'main',
+            'section',
+            'article',
+            'footer',
+            'h1',
+            'h2',
+            'h3',
+            'p',
+            'a',
+            'button',
+          ].join(',');
+
+          return Array.from(document.querySelectorAll(selector))
+            .map((element) => {
+              const tag = element.tagName.toLowerCase();
+              const role = element.getAttribute('role');
+              const label = element.getAttribute('aria-label');
+              const href = element instanceof HTMLAnchorElement ? element.href : '';
+              const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+              return [tag, role ? `role=${role}` : '', label ? `label=${label}` : '', href ? `href=${href}` : '', text]
+                .filter(Boolean)
+                .join(' | ');
+            })
+            .filter((line) => line.length > 4)
+            .slice(0, 160)
+            .join('\n');
+        });
 
         return {
-          url,
-          html: await page.content(),
-          source: 'playwright',
+          result: {
+            url,
+            html: await page.content(),
+            source: 'playwright',
+            semanticText,
+          },
         };
       } finally {
         await browser.close();
       }
-    } catch {
-      return null;
+    } catch (error) {
+      return {
+        result: null,
+        reason: (error as Error).message,
+      };
     }
   }
 

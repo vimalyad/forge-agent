@@ -68,5 +68,17 @@ export class WriteFileTool implements ITool {
     if (content.length < 1500) {
       throw new Error('output/index.html is too small to satisfy the clone requirements.');
     }
+
+    if (content.length < 6000) {
+      throw new Error('output/index.html is too thin for a high-quality Scaler clone.');
+    }
+
+    if (/[\uFFFD]/.test(content)) {
+      throw new Error('output/index.html contains broken encoded characters.');
+    }
+
+    if (/[\u{1F300}-\u{1FAFF}]/u.test(content)) {
+      throw new Error('output/index.html contains emoji. Use professional text labels or CSS instead.');
+    }
   }
 }
