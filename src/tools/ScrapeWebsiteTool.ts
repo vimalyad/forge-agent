@@ -1,4 +1,5 @@
 import { Type, type FunctionDeclaration } from '@google/genai';
+import zlib from 'node:zlib';
 import type { ITool, ToolResult } from '../core/ITool.js';
 
 type RenderResult = {
@@ -115,7 +116,13 @@ export class ScrapeWebsiteTool implements ITool {
               const href = element instanceof HTMLAnchorElement ? element.href : '';
               const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
 
-              return [tag, role ? `role=${role}` : '', label ? `label=${label}` : '', href ? `href=${href}` : '', text]
+              let classesStr = '';
+              if (typeof element.className === 'string' && element.className.trim()) {
+                const parts = element.className.trim().split(/\s+/).slice(0, 3);
+                if (parts.length > 0) classesStr = `classes=${parts.join(' ')}`;
+              }
+
+              return [tag, classesStr, role ? `role=${role}` : '', label ? `label=${label}` : '', href ? `href=${href}` : '', text]
                 .filter(Boolean)
                 .join(' | ');
             })
@@ -124,7 +131,30 @@ export class ScrapeWebsiteTool implements ITool {
             .join('\n');
         });
 
-        const screenshotBuffer: Buffer = await page.screenshot({ fullPage: false, type: 'png' });
+        const heightData = await page.evaluate(() => ({
+          full: document.body.scrollHeight,
+          viewport: window.innerHeight,
+        }));
+
+        let screenshotBuffer: Buffer;
+
+        try {
+          const buffers: Buffer[] = [];
+          const maxShots = 5;
+          let currentScroll = 0;
+          for (let i = 0; i < maxShots; i++) {
+            await page.evaluate((y: number) => window.scrollTo(0, y), currentScroll);
+            await page.waitForTimeout(500);
+            const buf = await page.screenshot({ fullPage: false, type: 'png' });
+            buffers.push(buf);
+            currentScroll += heightData.viewport;
+            if (currentScroll >= heightData.full) break;
+          }
+          screenshotBuffer = this.stitchPngs(buffers);
+        } catch (error) {
+          screenshotBuffer = await page.screenshot({ fullPage: true, type: 'png' });
+        }
+
         const screenshotBase64 = screenshotBuffer.toString('base64');
 
         return {
@@ -237,5 +267,88 @@ export class ScrapeWebsiteTool implements ITool {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .trim();
+  }
+
+  private stitchPngs(buffers: Buffer[]): Buffer {
+    if (buffers.length === 1) return buffers[0];
+    
+    let totalHeight = 0;
+    let width = 0;
+    const idats: Buffer[] = [];
+    
+    for (const buf of buffers) {
+      if (buf.readUInt32BE(0) !== 0x89504e47 || buf.readUInt32BE(4) !== 0x0d0a1a0a) {
+        throw new Error('Not a PNG');
+      }
+      let offset = 8;
+      let h = 0;
+      while (offset < buf.length) {
+        const length = buf.readUInt32BE(offset);
+        const type = buf.toString('ascii', offset + 4, offset + 8);
+        if (type === 'IHDR') {
+          if (!width) width = buf.readUInt32BE(offset + 8);
+          h = buf.readUInt32BE(offset + 12);
+        } else if (type === 'IDAT') {
+          idats.push(buf.subarray(offset + 8, offset + 8 + length));
+        } else if (type === 'IEND') {
+          break;
+        }
+        offset += length + 12;
+      }
+      totalHeight += h;
+    }
+    
+    const compressedIdat = Buffer.concat(idats);
+    const uncompressed = zlib.inflateSync(compressedIdat);
+    const newCompressed = zlib.deflateSync(uncompressed);
+    
+    const template = buffers[0];
+    const newPng: Buffer[] = [];
+    newPng.push(template.subarray(0, 8));
+    
+    let offset = 8;
+    while (offset < template.length) {
+      const length = template.readUInt32BE(offset);
+      const type = template.toString('ascii', offset + 4, offset + 8);
+      
+      if (type === 'IHDR') {
+        const ihdr = Buffer.alloc(length + 12);
+        template.copy(ihdr, 0, offset, offset + length + 12);
+        ihdr.writeUInt32BE(totalHeight, 16);
+        const crc = this.crc32(ihdr.subarray(4, 4 + length + 4));
+        ihdr.writeUInt32BE(crc, 8 + length);
+        newPng.push(ihdr);
+      } else if (type === 'IDAT') {
+        // skip original IDATs
+      } else if (type === 'IEND') {
+        const idat = Buffer.alloc(newCompressed.length + 12);
+        idat.writeUInt32BE(newCompressed.length, 0);
+        idat.write('IDAT', 4);
+        newCompressed.copy(idat, 8);
+        const crc = this.crc32(idat.subarray(4, 4 + newCompressed.length + 4));
+        idat.writeUInt32BE(crc, 8 + newCompressed.length);
+        newPng.push(idat);
+        newPng.push(template.subarray(offset, offset + length + 12));
+        break;
+      } else {
+        newPng.push(template.subarray(offset, offset + length + 12));
+      }
+      
+      offset += length + 12;
+    }
+    
+    return Buffer.concat(newPng);
+  }
+
+  private crc32(buf: Buffer): number {
+    let crc = 0 ^ (-1);
+    for (let i = 0; i < buf.length; i++) {
+      let byte = buf[i];
+      crc = crc ^ byte;
+      for (let j = 0; j < 8; j++) {
+        crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+      }
+    }
+    return (crc ^ (-1)) >>> 0;
   }
 }

@@ -69,6 +69,7 @@ export class GeminiAgent implements IAgent {
         const validationError = await this.outputValidator.validate();
 
         if (!validationError) {
+          await this.runEnhancementPass(signal);
           return;
         }
 
@@ -162,40 +163,133 @@ export class GeminiAgent implements IAgent {
       };
 
       this.history.push(toolContent);
-
-      // Inject enhancement prompt after the first successful write_file
-      if (
-        !this.hasEnhanced &&
-        calls.some((c) => c.name === 'write_file') &&
-        this.latestHtml &&
-        this.latestBlueprint
-      ) {
-        this.hasEnhanced = true;
-        this.display.agentMessage('Injecting expert visual design critic prompt for enhancement pass...');
-        
-        const enhancementParts: Part[] = [
-          { text: ENHANCEMENT_PROMPT },
-          { text: `\n\n--- TARGET BLUEPRINT ---\n${this.latestBlueprint}` },
-          { text: `\n\n--- GENERATED HTML ---\n${this.latestHtml}` },
-        ];
-
-        if (this.latestScreenshotBase64) {
-          enhancementParts.push({
-            inlineData: {
-              mimeType: 'image/png',
-              data: this.latestScreenshotBase64,
-            },
-          });
-        }
-
-        this.history.push({
-          role: 'user',
-          parts: enhancementParts,
-        });
-      }
     }
 
     throw new Error(`Agent reached ${MAX_AGENT_STEPS} steps without finishing.`);
+  }
+
+  private async runEnhancementPass(signal?: AbortSignal): Promise<void> {
+    this.display.agentMessage('Injecting expert visual design critic prompt for enhancement pass...');
+    
+    let html = '';
+    try {
+      html = await this.registry.execute('read_file', { path: 'output/index.html' });
+    } catch {
+      this.display.warn('Enhancement pass failed: could not read output/index.html');
+      return;
+    }
+
+    const screenshotBase64 = this.extractLastScreenshot();
+    
+    const parts: Part[] = [
+      { text: `Enhancement pass: The HTML above has passed basic validation. Now elevate it to production quality. Read the screenshot carefully.\n\nYou must: (1) match the exact hero background treatment from the screenshot, (2) extract the precise brand primary color and apply it consistently via a CSS variable, (3) ensure the navbar is sticky with backdrop blur if the screenshot shows a translucent nav, (4) add hover transitions to all cards and buttons, (5) add an IntersectionObserver fade-in for cards and section headings, (6) add mobile nav toggle JavaScript, (7) ensure the footer background matches the screenshot exactly.\n\nCall write_file with the fully enhanced output/index.html. Do not truncate. Do not add placeholder content. Output must exceed 8000 characters.` }
+    ];
+
+    if (screenshotBase64) {
+      parts.unshift({
+        inlineData: { mimeType: 'image/png', data: screenshotBase64 }
+      });
+    }
+
+    this.history.push({ role: 'user', parts });
+
+    for (let step = 1; step <= 4; step += 1) {
+      if (signal?.aborted) return;
+      this.display.startSpinner(`enhancing step ${step}`);
+
+      let response;
+      try {
+        response = await this.client.models.generateContent({
+          model: this.model,
+          contents: this.history.all(),
+          config: {
+            systemInstruction: SYSTEM_PROMPT,
+            tools: [{ functionDeclarations: this.registry.schemas() }],
+          },
+        });
+      } catch (error) {
+        this.display.stopSpinner(false, 'API call failed');
+        return;
+      }
+
+      this.display.stopSpinner(true);
+
+      const modelContent = response.candidates?.[0]?.content;
+      if (modelContent) this.history.push(modelContent);
+
+      const text = this.textFromContent(modelContent);
+      if (text) this.display.agentMessage(text);
+
+      const calls = response.functionCalls;
+      if (!calls?.length) break;
+
+      const toolResults: Part[] = [];
+
+      for (const call of calls) {
+        if (signal?.aborted) return;
+        const args = call.args as Record<string, unknown> | undefined;
+        this.display.toolCall(call.name ?? 'unknown', args ?? {});
+
+        let output = '';
+        let success = true;
+
+        try {
+          if (call.name && PRE_JUDGED_TOOLS.has(call.name)) {
+            const preResult = await this.judge.evaluatePre(call.name, args ?? {});
+            this.display.judgePreResult(call.name, preResult.passed, preResult.reason);
+            if (!preResult.passed) {
+              success = false;
+              output = `[PRE-EXECUTION JUDGE FAIL: ${preResult.reason}]`;
+            }
+          }
+
+          if (success) {
+            output = await this.registry.execute(call.name, args);
+            this.display.toolResult(call.name ?? 'unknown', true, output.slice(0, 100));
+          }
+        } catch (error) {
+          output = `Error: ${(error as Error).message}`;
+          success = false;
+          this.display.toolResult(call.name ?? 'unknown', false, output);
+        }
+
+        if (success && call.name && JUDGED_TOOLS.has(call.name)) {
+          const result = await this.judge.evaluate(call.name, output);
+          this.display.judgeResult(result.passed, result.reason);
+          if (!result.passed) output = `${output}\n\n[JUDGE FAIL: ${result.reason}]`;
+        }
+
+        toolResults.push({
+          functionResponse: {
+            name: call.name,
+            response: { result: output },
+          },
+        });
+      }
+
+      this.history.push({ role: 'user', parts: toolResults });
+    }
+
+    const validationError = await this.outputValidator.validate();
+    if (validationError) {
+      this.display.warn(`Enhancement pass validation failed: ${validationError}`);
+    } else {
+      this.display.agentMessage('Enhancement pass complete.');
+    }
+  }
+
+  private extractLastScreenshot(): string | undefined {
+    const all = this.history.all();
+    for (let i = all.length - 1; i >= 0; i--) {
+      const parts = all[i].parts;
+      if (!parts) continue;
+      for (const part of parts) {
+        if (part.inlineData && part.inlineData.mimeType === 'image/png') {
+          return part.inlineData.data;
+        }
+      }
+    }
+    return undefined;
   }
 
   private textFromContent(content: Content | undefined): string {
