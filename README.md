@@ -1,17 +1,31 @@
 # forge-agent
 
-A conversational, autonomous CLI coding agent that uses predefined model routes to clone and recreate websites from the terminal. Code generation and vision-backed page reconstruction now run through Anthropic.
+`forge-agent` is a CLI website-cloning agent. It resolves a target site, scrapes the live page, generates `output/index.html`, validates the result, and opens the finished file in the default browser.
 
-The agent plans, scrapes, visually analyzes, evaluates tool output, writes `output/index.html`, reads it back, and iterates until the generated page passes validation.
+The runtime uses fixed model routing. Users do not choose models interactively.
+
+## Current Model Flow
+
+| Task | Provider | Model |
+| --- | --- | --- |
+| URL resolution | Groq | `llama-3.3-70b-versatile` |
+| Draft HTML iterations | OpenRouter | `qwen/qwen3-235b-a22b:free` |
+| Final HTML pass | Anthropic | `ANTHROPIC_CODE_MODEL` or `claude-sonnet-4-5-20250929` |
+| Tool judge | Groq | `llama-3.3-70b-versatile` |
+| Judge fallback | Cerebras | `llama-3.3-70b` |
+
+With `MAX_AGENT_STEPS = 6`, draft attempts use OpenRouter when `OPENROUTER_API_KEY` is configured. The final generation step uses Anthropic. If an OpenRouter draft validates early, the agent still runs one final Anthropic pass before completion.
 
 ## Features
 
-- **Smart target resolution:** Natural-language requests such as "Clone the ChatGPT website" are resolved to a canonical homepage URL by the predefined fast Anthropic route.
-- **Vision-augmented scraping:** Playwright extracts a semantic blueprint and captures a live screenshot. The screenshot is sent to Anthropic for visual layout, color, spacing, and typography matching.
-- **Multi-step generation loop:** The agent writes the page, reads it back, validates it, and retries with corrections.
-- **Self-evaluating judges:** Tool outputs can be judged by the predefined judge route. The current default uses Groq with a Cerebras fallback when configured.
-- **Fixed model policy:** Users do not choose models at runtime. Model-to-task mapping lives in `src/config/models.ts`.
-- **Mid-run interruption:** Press `Esc`, `Ctrl+C`, or `q` to abort the current loop and return to the prompt.
+- Natural-language target resolution through the predefined Groq route.
+- Playwright scraping for semantic page structure, screenshots, and media assets.
+- Cost-aware generation: free OpenRouter drafts, one Anthropic final pass.
+- Tool judging through Groq with Cerebras fallback.
+- Validation before completion through `OutputValidator`.
+- Automatic preview of `output/index.html` in the OS default browser after success.
+- Fixed model policy configured in code, not selected by users at runtime.
+- Mid-run interruption with `Esc`, `Ctrl+C`, or `q`.
 
 ## Setup
 
@@ -27,12 +41,12 @@ Create a local `.env` file:
 ```env
 ANTHROPIC_API_KEY="your-anthropic-key"
 ANTHROPIC_CODE_MODEL="claude-sonnet-4-5-20250929"
-ANTHROPIC_FAST_MODEL="claude-3-5-haiku-20241022"
 GROQ_API_KEY="your-groq-key"
+OPENROUTER_API_KEY="your-openrouter-key"
 CEREBRAS_API_KEY="your-cerebras-key"
 ```
 
-`ANTHROPIC_CODE_MODEL` and `ANTHROPIC_FAST_MODEL` are optional. If omitted, the defaults in `src/config/constants.ts` are used.
+`ANTHROPIC_CODE_MODEL` is optional. If omitted, the default in `src/config/constants.ts` is used.
 
 ## Usage
 
@@ -42,20 +56,29 @@ npm start
 
 Example:
 
-> Clone the Scaler Academy website and generate output/index.html with a header, hero section, and footer
+```text
+Clone the Scaler Academy website and generate output/index.html with a header, hero section, and footer
+```
 
 Or without a URL:
 
-> Recreate the OpenAI homepage
+```text
+Recreate the OpenAI homepage
+```
 
 ## Project Structure
 
-- `src/index.ts` - Main REPL loop, fixed agent creation, UI state, and abort handling.
-- `src/providers/anthropic/AnthropicAgent.ts` - Anthropic implementation of the generation loop.
-- `src/config/models.ts` - Predefined model routes by task.
-- `src/services/OpenAICompatibleJudge.ts` - Judge route implementation for Groq/Cerebras/OpenRouter-compatible APIs.
-- `src/tools/` - File manipulation, web fetching, and rich website scraping.
-- `src/ui/Display.ts` - Terminal rendering and provider status display.
+- `src/index.ts` - CLI REPL, fixed agent creation, and abort handling.
+- `src/providers/anthropic/AnthropicAgent.ts` - Main generation workflow coordinator.
+- `src/providers/anthropic/HtmlGenerationPromptBuilder.ts` - HTML prompt, media asset, and blueprint compaction logic.
+- `src/services/AnthropicMessagesClient.ts` - Anthropic Messages API client.
+- `src/services/OpenRouterChatClient.ts` - OpenRouter draft-generation client.
+- `src/services/OpenAICompatibleClient.ts` - Shared client for Groq, Cerebras, and other OpenAI-compatible routes.
+- `src/services/OpenAICompatibleJudge.ts` - Tool judge implementation.
+- `src/config/models.ts` - Task-to-model routes.
+- `src/config/modelRuntime.ts` - Runtime constants such as token limits, output path, and draft model.
+- `src/tools/` - File, web fetch, scrape, and workspace tools.
+- `src/ui/Display.ts` - Terminal rendering.
 
 ## Build
 

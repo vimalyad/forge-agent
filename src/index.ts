@@ -2,10 +2,7 @@ import "dotenv/config";
 import readline from "node:readline";
 import { AnthropicAgent } from "./providers/anthropic/AnthropicAgent.js";
 import type { IAgent } from "./core/IAgent.js";
-import {
-  DEFAULT_MODEL_OPTION,
-  type ModelOption,
-} from "./config/models.js";
+import { DEFAULT_MODEL_OPTION, type ModelOption } from "./config/models.js";
 import { Display } from "./ui/Display.js";
 import { ListFilesTool } from "./tools/ListFilesTool.js";
 import { ReadFileTool } from "./tools/ReadFileTool.js";
@@ -127,7 +124,6 @@ function createAgent(
     registry,
     judge,
     display,
-    undefined,
     undefined,
     modelOption.model,
     router,

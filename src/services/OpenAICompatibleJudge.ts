@@ -1,6 +1,7 @@
 import type { ToolJudge } from "../core/ToolJudge.js";
 import type { TaskRouter } from "./TaskRouter.js";
 import type { Display } from "../ui/Display.js";
+import { OpenAICompatibleClient } from "./OpenAICompatibleClient.js";
 
 const JUDGE_PROMPT = `You are a strict CLI-agent judge.
 Given a tool name and its output, respond with exactly one line:
@@ -17,10 +18,14 @@ FAIL: <brief reason>
 For 'write_file', fail if the HTML content is missing a closing </body> or </html> tag, contains placeholders like <TODO> or 'content goes here', or is structurally broken. Otherwise pass.`;
 
 export class OpenAICompatibleJudge implements ToolJudge {
+  private readonly client: OpenAICompatibleClient;
+
   constructor(
     private readonly router: TaskRouter,
     private readonly display: Display,
-  ) {}
+  ) {
+    this.client = new OpenAICompatibleClient(router);
+  }
 
   async evaluatePre(
     toolName: string,
@@ -41,7 +46,11 @@ export class OpenAICompatibleJudge implements ToolJudge {
       `Tool: ${toolName}\nArguments:\n${JSON.stringify(preview)}`,
     );
 
-    if (!text) return { passed: true, reason: "Judge returned empty response, defaulting to PASS" };
+    if (!text)
+      return {
+        passed: true,
+        reason: "Judge returned empty response, defaulting to PASS",
+      };
 
     const passed = text.toUpperCase().startsWith("PASS");
     const reason =
@@ -59,7 +68,11 @@ export class OpenAICompatibleJudge implements ToolJudge {
       `Tool: ${toolName}\nOutput:\n${toolOutput.slice(0, 3000)}`,
     );
 
-    if (!text) return { passed: true, reason: "Judge returned empty response, defaulting to PASS" };
+    if (!text)
+      return {
+        passed: true,
+        reason: "Judge returned empty response, defaulting to PASS",
+      };
 
     const passed = text.toUpperCase().startsWith("PASS");
     const reason =
@@ -73,7 +86,7 @@ export class OpenAICompatibleJudge implements ToolJudge {
     userMessage: string,
   ): Promise<string> {
     const route = this.router.resolve(task);
-    const { baseURL, apiKey } = this.router.buildOpenAICompatibleClient(route);
+    const { apiKey } = this.router.buildOpenAICompatibleClient(route);
 
     if (!apiKey) {
       // Fall back to a no-op pass if no judge key is configured
@@ -82,33 +95,12 @@ export class OpenAICompatibleJudge implements ToolJudge {
     }
 
     try {
-      const response = await fetch(`${baseURL}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-          "HTTP-Referer": "https://github.com/forge-agent",
-          "X-Title": "forge-agent",
-        },
-        body: JSON.stringify({
-          model: route.model,
-          max_tokens: 60,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage },
-          ],
-        }),
-      });
-
-      if (response.status === 429) {
-        this.router.markFailed(route);
-        this.display.warn("Judge quota exceeded, skipping evaluation");
-        return "PASS: judge quota exceeded, skipping evaluation";
-      }
-
-      const data = await response.json() as any;
-      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-      return data.choices?.[0]?.message?.content?.trim() ?? "";
+      return await this.client.createTextCompletion(
+        route,
+        systemPrompt,
+        userMessage,
+        60,
+      );
     } catch (e) {
       this.display.warn(
         `Judge call failed: ${(e as Error).message}, skipping evaluation`,

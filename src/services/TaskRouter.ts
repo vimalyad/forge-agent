@@ -1,7 +1,7 @@
 import type { TaskRoute, TaskType } from "../config/models.js";
 import { MODEL_ROUTES, FALLBACK_ROUTES } from "../config/models.js";
 
-export type OpenAICompatibleClient = {
+export type OpenAICompatibleConnection = {
   baseURL: string;
   apiKey: string;
 };
@@ -42,7 +42,7 @@ export class TaskRouter {
     );
   }
 
-  buildOpenAICompatibleClient(route: TaskRoute): OpenAICompatibleClient {
+  buildOpenAICompatibleClient(route: TaskRoute): OpenAICompatibleConnection {
     const keyMap: Record<string, string[]> = {
       groq: ["GROQ_API_KEY", "groq_api_key"],
       openrouter: ["OPENROUTER_API_KEY", "openrouter_api_key"],

@@ -1,7 +1,4 @@
-import {
-  DEFAULT_ANTHROPIC_CODE_MODEL,
-  GROQ_JUDGE_MODEL,
-} from "./constants.js";
+import { DEFAULT_ANTHROPIC_CODE_MODEL, GROQ_JUDGE_MODEL } from "./constants.js";
 
 export type ModelProvider = "anthropic" | "groq" | "openrouter" | "cerebras";
 
@@ -44,8 +41,6 @@ export const ACTIVE_MODEL_OPTION: ModelOption = {
   apiKeyNames: ["ANTHROPIC_API_KEY", "anthropic_api_key"],
 };
 
-export const MODEL_OPTIONS: ModelOption[] = [
-  ACTIVE_MODEL_OPTION,
-];
+export const MODEL_OPTIONS: ModelOption[] = [ACTIVE_MODEL_OPTION];
 
 export const DEFAULT_MODEL_OPTION = ACTIVE_MODEL_OPTION;

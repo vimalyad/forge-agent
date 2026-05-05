@@ -1,9 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { OUTPUT_FILE_PATH } from "../config/modelRuntime.js";
 
 export class OutputValidator {
   async validate(): Promise<string | null> {
-    const filePath = path.resolve(process.cwd(), "output/index.html");
+    const filePath = path.resolve(process.cwd(), OUTPUT_FILE_PATH);
 
     try {
       const content = await fs.readFile(filePath, "utf8");
@@ -21,7 +22,7 @@ export class OutputValidator {
           normalizedContent.includes(placeholder),
         )
       ) {
-        return "output/index.html still contains placeholder content.";
+        return `${OUTPUT_FILE_PATH} still contains placeholder content.`;
       }
 
       const requiredParts = ["<html", "<style", "<script"];
@@ -45,28 +46,28 @@ export class OutputValidator {
       if (!hasSection) missingParts.push("section/main/article");
 
       if (missingParts.length > 0) {
-        return `output/index.html is missing ${missingParts.join(", ")}.`;
+        return `${OUTPUT_FILE_PATH} is missing ${missingParts.join(", ")}.`;
       }
 
       if (content.length < 1500) {
-        return "output/index.html is too small to satisfy the clone requirements.";
+        return `${OUTPUT_FILE_PATH} is too small to satisfy the clone requirements.`;
       }
 
       if (content.length < 6000) {
-        return "output/index.html is too thin for a high-quality clone. Add richer sections, content, and responsive styling.";
+        return `${OUTPUT_FILE_PATH} is too thin for a high-quality clone. Add richer sections, content, and responsive styling.`;
       }
 
       if (/[\uFFFD]/.test(content)) {
-        return "output/index.html contains broken encoded characters.";
+        return `${OUTPUT_FILE_PATH} contains broken encoded characters.`;
       }
 
       if (/[\u{1F300}-\u{1FAFF}]/u.test(content)) {
-        return "output/index.html contains emoji. Use professional text labels or CSS instead.";
+        return `${OUTPUT_FILE_PATH} contains emoji. Use professional text labels or CSS instead.`;
       }
 
       return null;
     } catch (error) {
-      return `output/index.html is not readable: ${(error as Error).message}`;
+      return `${OUTPUT_FILE_PATH} is not readable: ${(error as Error).message}`;
     }
   }
 }

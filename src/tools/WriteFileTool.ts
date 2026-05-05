@@ -3,6 +3,7 @@ import path from "node:path";
 import type { ITool } from "../core/ITool.js";
 import { Type, type FunctionDeclaration } from "../core/ToolSchema.js";
 import { resolveWorkspacePath } from "./PathGuard.js";
+import { OUTPUT_FILE_PATH } from "../config/modelRuntime.js";
 
 export class WriteFileTool implements ITool {
   readonly name = "write_file";
@@ -60,7 +61,7 @@ export class WriteFileTool implements ITool {
       );
     }
 
-    if (filePath.replace(/\\/g, "/") !== "output/index.html") {
+    if (filePath.replace(/\\/g, "/") !== OUTPUT_FILE_PATH) {
       return;
     }
 
@@ -86,29 +87,31 @@ export class WriteFileTool implements ITool {
 
     if (missingParts.length > 0) {
       throw new Error(
-        `output/index.html is incomplete. Missing: ${missingParts.join(", ")}`,
+        `${OUTPUT_FILE_PATH} is incomplete. Missing: ${missingParts.join(", ")}`,
       );
     }
 
     if (content.length < 1500) {
       throw new Error(
-        "output/index.html is too small to satisfy the clone requirements.",
+        `${OUTPUT_FILE_PATH} is too small to satisfy the clone requirements.`,
       );
     }
 
     if (content.length < 6000) {
       throw new Error(
-        "output/index.html is too thin for a high-quality clone. Add richer sections, content, and responsive styling.",
+        `${OUTPUT_FILE_PATH} is too thin for a high-quality clone. Add richer sections, content, and responsive styling.`,
       );
     }
 
     if (/[\uFFFD]/.test(content)) {
-      throw new Error("output/index.html contains broken encoded characters.");
+      throw new Error(
+        `${OUTPUT_FILE_PATH} contains broken encoded characters.`,
+      );
     }
 
     if (/[\u{1F300}-\u{1FAFF}]/u.test(content)) {
       throw new Error(
-        "output/index.html contains emoji. Use professional text labels or CSS instead.",
+        `${OUTPUT_FILE_PATH} contains emoji. Use professional text labels or CSS instead.`,
       );
     }
   }

@@ -1,6 +1,7 @@
 import zlib from "node:zlib";
 import type { ITool, ToolResult, MediaAssets } from "../core/ITool.js";
 import { Type, type FunctionDeclaration } from "../core/ToolSchema.js";
+import { SCRAPE_MAX_SCREENSHOTS } from "../config/modelRuntime.js";
 
 type RenderResult = {
   url: string;
@@ -205,7 +206,7 @@ export class ScrapeWebsiteTool implements ITool {
 
         try {
           const buffers: Buffer[] = [];
-          const maxShots = 2;
+          const maxShots = SCRAPE_MAX_SCREENSHOTS;
           let currentScroll = 0;
           for (let i = 0; i < maxShots; i++) {
             await page.evaluate(
