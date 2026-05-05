@@ -66,6 +66,73 @@ Or without a URL:
 Recreate the OpenAI homepage
 ```
 
+## Demo
+
+Here is an example run cloning the Scaler Academy website with the enhancement pass (`--enhance`) enabled:
+
+**[▶️ Watch Demo Video](https://drive.google.com/file/d/PLACEHOLDER_VIDEO_ID/view?usp=sharing)**
+
+```text
+  ──────────────────────────────────────────────
+  ⚡ forge-agent
+  AI-powered CLI coding agent
+  Type an instruction and press Enter.  "exit" to quit.
+  ──────────────────────────────────────────────
+
+  Active model   ANTHROPIC   Anthropic Claude Code Generation
+
+  you › Clone the Scaler Academy website and generate output/index.html with a header, hero section, and footer
+✔   resolved -> https://www.scaler.com
+
+  agent › Target site identified: https://www.scaler.com
+
+  [01] ◆ scrape_website {"url":"https://www.scaler.com"}
+       ✔ scrape_website 10981ms — scraped + screenshot captured (653kb PNG)
+
+  [JUDGE ✦]  Successfully scraped relevant content from the provided website.
+✔   Done
+  [02] ◆ write_file {"path":"output/index.html","content":"I'll clone the Scaler Academy website by first scraping it fo
+       [PRE-JUDGE ✗]  Evaluating args for write_file... HTML content is structurally broken and contains a tool call instead of valid HTML.
+       ✘ write_file 387ms — [PRE-EXECUTION JUDGE FAIL: HTML content is structurally broken and contains a to
+✔   Done
+  [03] ◆ write_file {"path":"output/index.html","content":"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charse
+       [PRE-JUDGE ✦]  Evaluating args for write_file... HTML content appears structurally valid with closing body and html tags.
+       ✔ write_file 439ms — Written 9044 bytes to output/index.html
+
+  [JUDGE ✦]  successful file write with byte count.
+  [04] ◆ read_file {"path":"output/index.html"}
+       ✔ read_file 2ms — <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta nam
+
+  [JUDGE ✦]  Successfully read a meaningful HTML file.
+
+  agent › Draft passed validation. Running final Anthropic output pass...
+
+✔   Done
+  [05] ◆ write_file {"path":"output/index.html","content":"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charse
+       [PRE-JUDGE ✦]  Evaluating args for write_file... HTML content appears structurally valid with closing body and html tags, and no apparent placeholders.
+       ✔ write_file 370ms — Written 36131 bytes to output/index.html
+
+  [JUDGE ✦]  Successfully wrote a substantial amount of data to a file.
+
+  agent › Injecting expert visual design critic prompt for enhancement pass...
+
+✔   Done
+  [06] ◆ write_file {"path":"output/index.html","content":"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charse
+       [PRE-JUDGE ✦]  Evaluating args for write_file... HTML content is structurally valid and contains all necessary closing tags.
+       ✔ write_file 375ms — Written 29998 bytes to output/index.html
+
+  [JUDGE ✦]  successful file write with byte count.
+
+  agent › Generated output/index.html with a header, hero section, footer, embedded CSS, and JavaScript.
+
+[agent] Preview opened. Generation complete.
+  ──────────────────────────────────────────────
+```
+
 ## Project Structure
 
 - `src/index.ts` - CLI REPL, fixed agent creation, and abort handling.
