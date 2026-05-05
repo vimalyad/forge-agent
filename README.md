@@ -9,12 +9,12 @@ The runtime uses fixed model routing. Users do not choose models interactively.
 | Task | Provider | Model |
 | --- | --- | --- |
 | URL resolution | Groq | `llama-3.3-70b-versatile` |
-| Draft HTML iterations | OpenRouter | `qwen/qwen3-235b-a22b:free` |
+| Draft HTML iterations | OpenRouter | `openrouter/free`, then `qwen/qwen3-coder:free`, then `deepseek/deepseek-r1:free` |
 | Final HTML pass | Anthropic | `ANTHROPIC_CODE_MODEL` or `claude-sonnet-4-5-20250929` |
 | Tool judge | Groq | `llama-3.3-70b-versatile` |
 | Judge fallback | Cerebras | `llama-3.3-70b` |
 
-With `MAX_AGENT_STEPS = 6`, draft attempts use OpenRouter when `OPENROUTER_API_KEY` is configured. The final generation step uses Anthropic. If an OpenRouter draft validates early, the agent still runs one final Anthropic pass before completion.
+With `MAX_AGENT_STEPS = 6`, draft attempts use OpenRouter when `OPENROUTER_API_KEY` is configured. The final generation step uses Anthropic. If an OpenRouter draft validates early, the agent still runs one final Anthropic pass before completion. OpenRouter draft generation uses a fallback list because free model availability changes over time.
 
 ## Features
 

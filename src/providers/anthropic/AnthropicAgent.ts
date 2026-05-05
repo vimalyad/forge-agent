@@ -3,7 +3,7 @@ import {
   MAX_AGENT_STEPS,
 } from "../../config/constants.js";
 import {
-  DRAFT_HTML_MODEL,
+  DRAFT_HTML_MODELS,
   HTML_MAX_TOKENS,
   OUTPUT_FILE_PATH,
   PRE_JUDGED_TOOLS,
@@ -272,6 +272,9 @@ export class AnthropicAgent implements IAgent {
       screenshotBase64: pageContext.screenshotBase64,
       mediaAssets: pageContext.mediaAssets,
     });
+    const textOnlyContent = prompt.content.filter(
+      (block) => block.type !== "image",
+    );
 
     const text =
       this.isFinalGenerationStep(step) || !this.openRouterClient.hasApiKey()
@@ -283,9 +286,9 @@ export class AnthropicAgent implements IAgent {
             signal,
           )
         : await this.openRouterClient.createCompletion(
-            DRAFT_HTML_MODEL,
+            DRAFT_HTML_MODELS,
             prompt.system,
-            prompt.content,
+            textOnlyContent,
             HTML_MAX_TOKENS,
             signal,
           );

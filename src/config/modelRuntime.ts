@@ -8,7 +8,11 @@ export const APP_HTTP_HEADERS = {
   title: "forge-agent",
 } as const;
 
-export const DRAFT_HTML_MODEL = "qwen/qwen3-235b-a22b:free";
+export const DRAFT_HTML_MODELS = [
+  "openrouter/free",
+  "qwen/qwen3-coder:free",
+  "deepseek/deepseek-r1:free",
+] as const;
 export const HTML_MAX_TOKENS = 8192;
 export const URL_RESOLVE_MAX_TOKENS = 80;
 export const BLUEPRINT_CHAR_LIMIT = 3500;

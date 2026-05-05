@@ -12,7 +12,7 @@ export class OpenRouterChatClient {
   }
 
   async createCompletion(
-    model: string,
+    models: string | readonly string[],
     system: string,
     content: LlmContentBlock[],
     maxTokens: number,
@@ -22,6 +22,37 @@ export class OpenRouterChatClient {
       throw new Error("OPENROUTER_API_KEY not set");
     }
 
+    const candidates = Array.isArray(models) ? models : [models];
+    const errors: string[] = [];
+
+    for (const model of candidates) {
+      try {
+        return await this.tryCreateCompletion(
+          model,
+          system,
+          content,
+          maxTokens,
+          signal,
+        );
+      } catch (error) {
+        if ((error as { name?: string }).name === "AbortError") {
+          throw error;
+        }
+
+        errors.push(`${model}: ${(error as Error).message}`);
+      }
+    }
+
+    throw new Error(`All OpenRouter draft models failed. ${errors.join(" | ")}`);
+  }
+
+  private async tryCreateCompletion(
+    model: string,
+    system: string,
+    content: LlmContentBlock[],
+    maxTokens: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
     const response = await fetch(API_ENDPOINTS.openRouterChatCompletions, {
       method: "POST",
       signal,
@@ -35,12 +66,12 @@ export class OpenRouterChatClient {
         model,
         max_tokens: maxTokens,
         messages: [
+          { role: "system", content: system },
           {
             role: "user",
             content: this.toOpenRouterContent(content),
           },
         ],
-        system,
       }),
     });
 
