@@ -5,6 +5,7 @@ import {
 import {
   DRAFT_HTML_MODELS,
   HTML_MAX_TOKENS,
+  FINAL_HTML_MAX_TOKENS,
   OUTPUT_FILE_PATH,
   PRE_JUDGED_TOOLS,
   URL_RESOLVE_MAX_TOKENS,
@@ -276,18 +277,23 @@ export class AnthropicAgent implements IAgent {
       (block) => block.type !== "image",
     );
 
+    const isFinalStep = this.isFinalGenerationStep(step);
+    const systemPrompt = isFinalStep
+      ? prompt.system + "\n\nCRITICAL: You MUST close every HTML tag properly. Always end your response with </body></html>. Do not truncate. If content is long, simplify sections but always produce complete valid HTML."
+      : prompt.system;
+
     const text =
-      this.isFinalGenerationStep(step) || !this.openRouterClient.hasApiKey()
+      isFinalStep || !this.openRouterClient.hasApiKey()
         ? await this.anthropicClient.createMessage(
             this.model,
-            prompt.system,
+            systemPrompt,
             prompt.content,
-            HTML_MAX_TOKENS,
+            isFinalStep ? FINAL_HTML_MAX_TOKENS : HTML_MAX_TOKENS,
             signal,
           )
         : await this.openRouterClient.createCompletion(
             DRAFT_HTML_MODELS,
-            prompt.system,
+            systemPrompt,
             textOnlyContent,
             HTML_MAX_TOKENS,
             signal,

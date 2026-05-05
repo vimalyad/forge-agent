@@ -14,6 +14,7 @@ export const DRAFT_HTML_MODELS = [
   "deepseek/deepseek-r1:free",
 ] as const;
 export const HTML_MAX_TOKENS = 8192;
+export const FINAL_HTML_MAX_TOKENS = 16000;
 export const URL_RESOLVE_MAX_TOKENS = 80;
 export const BLUEPRINT_CHAR_LIMIT = 3500;
 export const PREVIOUS_HTML_CHAR_LIMIT = 4000;
