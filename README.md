@@ -70,7 +70,7 @@ Recreate the OpenAI homepage
 
 Here is an example run cloning the Scaler Academy website with the enhancement pass (`--enhance`) enabled:
 
-**[▶️ Watch Demo Video](https://drive.google.com/file/d/PLACEHOLDER_VIDEO_ID/view?usp=sharing)**
+**[▶️ Watch Demo Video](https://youtu.be/J0NuIVE32d4)**
 
 ```text
   ──────────────────────────────────────────────
