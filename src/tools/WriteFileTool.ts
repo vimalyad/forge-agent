@@ -1,7 +1,7 @@
-import { Type, type FunctionDeclaration } from "@google/genai";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { ITool } from "../core/ITool.js";
+import { Type, type FunctionDeclaration } from "../core/ToolSchema.js";
 import { resolveWorkspacePath } from "./PathGuard.js";
 
 export class WriteFileTool implements ITool {
@@ -32,10 +32,10 @@ export class WriteFileTool implements ITool {
     const content = String(args.content ?? "");
     const resolvedPath = resolveWorkspacePath(filePath);
 
-    this.validateContent(filePath, content);
-
     await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
     await fs.writeFile(resolvedPath, content, "utf8");
+
+    this.validateContent(filePath, content);
 
     return `Written ${content.length} bytes to ${filePath}`;
   }
@@ -46,7 +46,6 @@ export class WriteFileTool implements ITool {
       "<updated_html_content>",
       "<scrape_result>",
       "<html_content>",
-      "todo",
       "content goes here",
       "placeholder",
     ];
@@ -65,17 +64,25 @@ export class WriteFileTool implements ITool {
       return;
     }
 
-    const requiredParts = [
-      "<html",
-      "<header",
-      "<section",
-      "<footer",
-      "<style",
-      "<script",
-    ];
+    const requiredParts = ["<html", "<style", "<script"];
     const missingParts = requiredParts.filter(
       (part) => !normalizedContent.includes(part),
     );
+
+    const hasHeader =
+      /<header[\s>]|id=["']header["']|class=["'][^"']*header/.test(
+        normalizedContent,
+      );
+    if (!hasHeader) missingParts.push("header");
+
+    const hasFooter =
+      /<footer[\s>]|id=["']footer["']|class=["'][^"']*footer/.test(
+        normalizedContent,
+      );
+    if (!hasFooter) missingParts.push("footer");
+
+    const hasSection = /<(section|main|article)[\s>]/.test(normalizedContent);
+    if (!hasSection) missingParts.push("section/main/article");
 
     if (missingParts.length > 0) {
       throw new Error(

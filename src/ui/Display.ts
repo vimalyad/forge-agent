@@ -4,8 +4,10 @@ import type { ModelProvider } from "../config/models.js";
 
 // ─── provider badge colours ──────────────────────────────────────────────────
 const PROVIDER_COLOR: Record<ModelProvider, ChalkInstance> = {
-  gemini: chalk.bgHex("#4285F4").black,
+  anthropic: chalk.bgHex("#D97757").black,
   groq: chalk.bgHex("#F55036").white,
+  openrouter: chalk.bgHex("#8B5CF6").white,
+  cerebras: chalk.bgHex("#F59E0B").black,
 };
 
 function providerBadge(provider: ModelProvider): string {

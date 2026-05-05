@@ -1,4 +1,4 @@
-import type { FunctionDeclaration } from "@google/genai";
+import type { FunctionDeclaration } from "../core/ToolSchema.js";
 import type { ITool, ToolResult } from "../core/ITool.js";
 
 type JsonSchema = {

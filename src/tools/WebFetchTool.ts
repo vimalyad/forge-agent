@@ -1,5 +1,5 @@
-import { Type, type FunctionDeclaration } from "@google/genai";
 import type { ITool } from "../core/ITool.js";
+import { Type, type FunctionDeclaration } from "../core/ToolSchema.js";
 
 export class WebFetchTool implements ITool {
   readonly name = "web_fetch";

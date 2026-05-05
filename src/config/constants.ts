@@ -1,8 +1,9 @@
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
-export const GEMINI_JUDGE_MODEL = "gemini-2.5-flash";
-export const DEFAULT_GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+export const DEFAULT_ANTHROPIC_CODE_MODEL =
+  process.env.ANTHROPIC_CODE_MODEL ?? "claude-sonnet-4-5-20250929";
+export const DEFAULT_ANTHROPIC_FAST_MODEL =
+  process.env.ANTHROPIC_FAST_MODEL ?? "claude-3-5-haiku-20241022";
 export const GROQ_JUDGE_MODEL = "llama-3.3-70b-versatile";
-export const MAX_AGENT_STEPS = 12;
+export const MAX_AGENT_STEPS = 40;
 
 export const SYSTEM_PROMPT = `You are forge-agent, an autonomous coding assistant running in a terminal.
 Your job is to clone any website the user describes by generating a complete working webpage.
@@ -22,7 +23,8 @@ Requirements:
 12. Do not claim completion until output/index.html has real complete HTML with header, hero, footer, style, and script tags.
 13. Do not use emoji, animal icons, broken encoded characters, or generic stock-photo hero sections.
 14. The final page should look like a serious production landing page, not a minimal classroom example.
-15. Explain completed steps briefly when done.`;
+15. Explain completed steps briefly when done.
+16. When media_assets are provided in the scrape output, use those exact URLs for images, logos, fonts, and backgrounds. Never use placeholder image services (picsum, placehold.it, via.placeholder, unsplash) in the final output.`;
 
 export const ENHANCEMENT_PROMPT = `You are an expert frontend engineer and visual design critic specializing in 
 pixel-faithful website recreation. You have just generated an HTML clone of a 

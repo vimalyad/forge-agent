@@ -1,6 +1,33 @@
-import { DEFAULT_GEMINI_MODEL, DEFAULT_GROQ_MODEL } from "./constants.js";
+import {
+  DEFAULT_ANTHROPIC_CODE_MODEL,
+  DEFAULT_ANTHROPIC_FAST_MODEL,
+  GROQ_JUDGE_MODEL,
+} from "./constants.js";
 
-export type ModelProvider = "gemini" | "groq";
+export type ModelProvider = "anthropic" | "groq" | "openrouter" | "cerebras";
+
+export type TaskType = "url_resolve" | "code_gen" | "vision" | "judge";
+
+export type TaskRoute = {
+  provider: ModelProvider;
+  model: string;
+  baseUrl?: string;
+};
+
+export const MODEL_ROUTES: Record<TaskType, TaskRoute> = {
+  url_resolve: { provider: "anthropic", model: DEFAULT_ANTHROPIC_FAST_MODEL },
+  code_gen: { provider: "anthropic", model: DEFAULT_ANTHROPIC_CODE_MODEL },
+  vision: { provider: "anthropic", model: DEFAULT_ANTHROPIC_CODE_MODEL },
+  judge: { provider: "groq", model: GROQ_JUDGE_MODEL },
+};
+
+export const FALLBACK_ROUTES: Partial<Record<TaskType, TaskRoute>> = {
+  judge: {
+    provider: "cerebras",
+    model: "llama-3.3-70b",
+    baseUrl: "https://api.cerebras.ai/v1",
+  },
+};
 
 export type ModelOption = {
   id: string;
@@ -10,35 +37,16 @@ export type ModelOption = {
   apiKeyNames: string[];
 };
 
+export const ACTIVE_MODEL_OPTION: ModelOption = {
+  id: "anthropic-code",
+  label: "Anthropic Claude Code Generation",
+  provider: "anthropic",
+  model: DEFAULT_ANTHROPIC_CODE_MODEL,
+  apiKeyNames: ["ANTHROPIC_API_KEY", "anthropic_api_key"],
+};
+
 export const MODEL_OPTIONS: ModelOption[] = [
-  {
-    id: "gemini-flash",
-    label: "Gemini 2.5 Flash",
-    provider: "gemini",
-    model: DEFAULT_GEMINI_MODEL,
-    apiKeyNames: ["GEMINI_API_KEY", "gemini_api_key"],
-  },
-  {
-    id: "gemini-pro",
-    label: "Gemini 2.5 Pro",
-    provider: "gemini",
-    model: "gemini-2.5-pro",
-    apiKeyNames: ["GEMINI_API_KEY", "gemini_api_key"],
-  },
-  {
-    id: "groq-scout",
-    label: "Groq Llama 4 Scout",
-    provider: "groq",
-    model: DEFAULT_GROQ_MODEL,
-    apiKeyNames: ["GROQ_API_KEY", "groq_api_key"],
-  },
-  {
-    id: "groq-llama-3",
-    label: "Groq Llama 3.3 70B",
-    provider: "groq",
-    model: "llama-3.3-70b-versatile",
-    apiKeyNames: ["GROQ_API_KEY", "groq_api_key"],
-  },
+  ACTIVE_MODEL_OPTION,
 ];
 
-export const DEFAULT_MODEL_OPTION = MODEL_OPTIONS[0];
+export const DEFAULT_MODEL_OPTION = ACTIVE_MODEL_OPTION;

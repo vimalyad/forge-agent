@@ -1,6 +1,6 @@
-import { Type, type FunctionDeclaration } from "@google/genai";
 import fs from "node:fs/promises";
 import type { ITool } from "../core/ITool.js";
+import { Type, type FunctionDeclaration } from "../core/ToolSchema.js";
 import { resolveWorkspacePath } from "./PathGuard.js";
 
 export class ReadFileTool implements ITool {

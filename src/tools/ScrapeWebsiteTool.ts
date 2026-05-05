@@ -1,6 +1,6 @@
-import { Type, type FunctionDeclaration } from "@google/genai";
 import zlib from "node:zlib";
-import type { ITool, ToolResult } from "../core/ITool.js";
+import type { ITool, ToolResult, MediaAssets } from "../core/ITool.js";
+import { Type, type FunctionDeclaration } from "../core/ToolSchema.js";
 
 type RenderResult = {
   url: string;
@@ -10,7 +10,43 @@ type RenderResult = {
   fallbackReason?: string;
   /** PNG screenshot as base64, only present when Playwright is used. */
   screenshotBase64?: string;
+  mediaAssets?: MediaAssets;
 };
+
+function formatMediaAssets(assets: MediaAssets | undefined): string {
+  if (!assets) return "";
+  const lines: string[] = ["\nmedia_assets:"];
+  if (assets.logos.length)
+    lines.push(
+      "logos:\n" +
+        assets.logos.map((l) => `  - ${l.src} (alt: ${l.alt})`).join("\n"),
+    );
+  if (assets.heroImages.length)
+    lines.push(
+      "hero_images:\n" +
+        assets.heroImages
+          .map((i) => `  - ${i.src} (${i.width}px, alt: ${i.alt})`)
+          .join("\n"),
+    );
+  if (assets.backgroundImages.length)
+    lines.push(
+      "background_images:\n" +
+        assets.backgroundImages.map((u) => `  - ${u}`).join("\n"),
+    );
+  if (assets.fontLinks.length)
+    lines.push(
+      "font_links:\n" + assets.fontLinks.map((u) => `  - ${u}`).join("\n"),
+    );
+  if (assets.icons.length)
+    lines.push(
+      "favicon:\n" +
+        assets.icons
+          .slice(0, 2)
+          .map((u) => `  - ${u}`)
+          .join("\n"),
+    );
+  return lines.join("\n");
+}
 
 export class ScrapeWebsiteTool implements ITool {
   readonly name = "scrape_website";
@@ -40,7 +76,7 @@ export class ScrapeWebsiteTool implements ITool {
     const url = String(args.url ?? "");
     const rendered = await this.render(url);
 
-    const text = [
+    let text = [
       `url: ${rendered.url}`,
       `source: ${rendered.source}`,
       rendered.fallbackReason
@@ -52,10 +88,16 @@ export class ScrapeWebsiteTool implements ITool {
       this.cleanHtml(rendered.html),
     ]
       .filter(Boolean)
-      .join("\n\n")
-      .slice(0, 22000);
+      .join("\n\n");
 
-    return { text, screenshotBase64: rendered.screenshotBase64 };
+    text += formatMediaAssets(rendered.mediaAssets);
+    text = text.slice(0, 22000);
+
+    return {
+      text,
+      screenshotBase64: rendered.screenshotBase64,
+      mediaAssets: rendered.mediaAssets,
+    };
   }
 
   private async render(url: string): Promise<RenderResult> {
@@ -186,6 +228,98 @@ export class ScrapeWebsiteTool implements ITool {
 
         const screenshotBase64 = screenshotBuffer.toString("base64");
 
+        const mediaAssets = (await page.evaluate((): MediaAssets => {
+          const logos: { src: string; alt: string }[] = [];
+          const heroImages: { src: string; alt: string; width: number }[] = [];
+          const backgroundImages: string[] = [];
+          const fontLinks: string[] = [];
+          const icons: string[] = [];
+          const videos: string[] = [];
+
+          const logoSelectors = [
+            "header img",
+            "nav img",
+            'img[alt*="logo" i]',
+            'img[class*="logo" i]',
+            'img[src*="logo" i]',
+          ];
+          for (const sel of logoSelectors) {
+            document.querySelectorAll(sel).forEach((el) => {
+              const img = el as HTMLImageElement;
+              if (img.src?.startsWith("http") && img.width > 20) {
+                logos.push({ src: img.src, alt: img.alt });
+              }
+            });
+            if (logos.length > 0) break;
+          }
+
+          document.querySelectorAll("img[src]").forEach((el) => {
+            const img = el as HTMLImageElement;
+            const rect = img.getBoundingClientRect();
+            if (
+              img.src?.startsWith("http") &&
+              rect.top < 900 &&
+              rect.width > 100 &&
+              !logos.some((l) => l.src === img.src)
+            ) {
+              heroImages.push({
+                src: img.src,
+                alt: img.alt,
+                width: Math.round(rect.width),
+              });
+            }
+          });
+
+          document
+            .querySelectorAll(
+              'header, main, section, div, [class*="hero" i], [class*="banner" i]',
+            )
+            .forEach((el) => {
+              const rect = el.getBoundingClientRect();
+              if (rect.top > 900) return;
+              const bg = getComputedStyle(el).backgroundImage;
+              const match = bg.match(/url\(["']?(https?[^"')]+)/);
+              if (match && !backgroundImages.includes(match[1])) {
+                backgroundImages.push(match[1]);
+              }
+            });
+
+          document
+            .querySelectorAll('link[rel="stylesheet"], link[rel="preload"]')
+            .forEach((el) => {
+              const href = (el as HTMLLinkElement).href;
+              if (
+                href &&
+                (href.includes("fonts.google") ||
+                  href.includes("typekit") ||
+                  href.includes("fonts.gstatic"))
+              ) {
+                fontLinks.push(href);
+              }
+            });
+
+          document.querySelectorAll('link[rel*="icon"]').forEach((el) => {
+            const href = (el as HTMLLinkElement).href;
+            if (href?.startsWith("http")) icons.push(href);
+          });
+
+          document
+            .querySelectorAll("video[src], video source[src]")
+            .forEach((el) => {
+              const src = (el as HTMLSourceElement).src;
+              if (src?.startsWith("http")) videos.push(src);
+            });
+
+          return {
+            logos,
+            heroImages,
+            backgroundImages,
+            fontLinks,
+            icons,
+            videos,
+          };
+        })) as MediaAssets;
+
         return {
           result: {
             url,
@@ -193,6 +327,7 @@ export class ScrapeWebsiteTool implements ITool {
             source: "playwright",
             semanticText,
             screenshotBase64,
+            mediaAssets,
           },
         };
       } finally {

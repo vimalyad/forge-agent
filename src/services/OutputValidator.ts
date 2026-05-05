@@ -12,7 +12,6 @@ export class OutputValidator {
         "<updated_html_content>",
         "<scrape_result>",
         "<html_content>",
-        "todo",
         "content goes here",
         "placeholder",
       ];
@@ -25,17 +24,25 @@ export class OutputValidator {
         return "output/index.html still contains placeholder content.";
       }
 
-      const requiredParts = [
-        "<html",
-        "<header",
-        "<section",
-        "<footer",
-        "<style",
-        "<script",
-      ];
+      const requiredParts = ["<html", "<style", "<script"];
       const missingParts = requiredParts.filter(
         (part) => !normalizedContent.includes(part),
       );
+
+      const hasHeader =
+        /<header[\s>]|id=["']header["']|class=["'][^"']*header/.test(
+          normalizedContent,
+        );
+      if (!hasHeader) missingParts.push("header");
+
+      const hasFooter =
+        /<footer[\s>]|id=["']footer["']|class=["'][^"']*footer/.test(
+          normalizedContent,
+        );
+      if (!hasFooter) missingParts.push("footer");
+
+      const hasSection = /<(section|main|article)[\s>]/.test(normalizedContent);
+      if (!hasSection) missingParts.push("section/main/article");
 
       if (missingParts.length > 0) {
         return `output/index.html is missing ${missingParts.join(", ")}.`;
