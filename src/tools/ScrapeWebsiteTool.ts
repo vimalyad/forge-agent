@@ -205,7 +205,7 @@ export class ScrapeWebsiteTool implements ITool {
 
         try {
           const buffers: Buffer[] = [];
-          const maxShots = 5;
+          const maxShots = 2;
           let currentScroll = 0;
           for (let i = 0; i < maxShots; i++) {
             await page.evaluate(

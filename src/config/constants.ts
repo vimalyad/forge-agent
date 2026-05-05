@@ -3,7 +3,7 @@ export const DEFAULT_ANTHROPIC_CODE_MODEL =
 export const DEFAULT_ANTHROPIC_FAST_MODEL =
   process.env.ANTHROPIC_FAST_MODEL ?? "claude-3-5-haiku-20241022";
 export const GROQ_JUDGE_MODEL = "llama-3.3-70b-versatile";
-export const MAX_AGENT_STEPS = 40;
+export const MAX_AGENT_STEPS = 6;
 
 export const SYSTEM_PROMPT = `You are forge-agent, an autonomous coding assistant running in a terminal.
 Your job is to clone any website the user describes by generating a complete working webpage.

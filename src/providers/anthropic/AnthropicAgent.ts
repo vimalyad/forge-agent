@@ -1,6 +1,5 @@
 import {
   DEFAULT_ANTHROPIC_CODE_MODEL,
-  DEFAULT_ANTHROPIC_FAST_MODEL,
   MAX_AGENT_STEPS,
   SYSTEM_PROMPT,
 } from "../../config/constants.js";
@@ -12,6 +11,7 @@ import { OutputValidator } from "../../services/OutputValidator.js";
 import type { TaskRouter } from "../../services/TaskRouter.js";
 import type { ToolRegistry } from "../../tools/ToolRegistry.js";
 import type { Display } from "../../ui/Display.js";
+import { openInBrowser } from "../../utils/openInBrowser.js";
 
 const PRE_JUDGED_TOOLS = new Set(["write_file"]);
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -29,6 +29,11 @@ type AnthropicContentBlock =
 
 type AnthropicResponse = {
   content?: { type: string; text?: string }[];
+  error?: { message?: string };
+};
+
+type OpenRouterResponse = {
+  choices?: { message?: { content?: string } }[];
   error?: { message?: string };
 };
 
@@ -83,6 +88,7 @@ export class AnthropicAgent implements IAgent {
           userInput,
           blueprint,
           correction,
+          step,
           undefined,
           screenshotBase64,
           mediaAssets,
@@ -125,6 +131,46 @@ export class AnthropicAgent implements IAgent {
       const validationError = await this.outputValidator.validate();
 
       if (!validationError) {
+        let currentHtml = readResult.output;
+        const isFinalStep = step >= MAX_AGENT_STEPS - 1;
+
+        if (!isFinalStep && process.env.OPENROUTER_API_KEY) {
+          this.display.agentMessage(
+            "Draft passed validation. Running final Anthropic output pass...",
+          );
+          this.display.startSpinner("finalizing with Anthropic");
+
+          try {
+            const finalHtml = await this.generateHtml(
+              userInput,
+              blueprint,
+              "",
+              MAX_AGENT_STEPS,
+              readResult.output,
+              screenshotBase64,
+              mediaAssets,
+              signal,
+            );
+            this.display.stopSpinner(true);
+
+            const finalWrite = await this.tryTool("write_file", {
+              path: "output/index.html",
+              content: finalHtml,
+            });
+
+            if (!finalWrite.success) {
+              correction = finalWrite.output;
+              continue;
+            }
+
+            await this.judgeTool("write_file", finalWrite.output);
+            currentHtml = finalHtml;
+          } catch (error) {
+            this.display.stopSpinner(false, "API call failed");
+            throw error;
+          }
+        }
+
         if (options?.enhance) {
           this.display.agentMessage(
             "Injecting expert visual design critic prompt for enhancement pass...",
@@ -135,7 +181,8 @@ export class AnthropicAgent implements IAgent {
               userInput,
               blueprint,
               "",
-              readResult.output,
+              MAX_AGENT_STEPS,
+              currentHtml,
               screenshotBase64,
               mediaAssets,
               signal,
@@ -161,6 +208,8 @@ export class AnthropicAgent implements IAgent {
         this.display.agentMessage(
           "Generated output/index.html with a header, hero section, footer, embedded CSS, and JavaScript.",
         );
+        openInBrowser("output/index.html");
+        console.log("[agent] Preview opened. Generation complete.");
         return;
       }
 
@@ -182,6 +231,7 @@ export class AnthropicAgent implements IAgent {
     userInput: string,
     blueprint: string,
     correction: string,
+    step: number,
     previousHtml?: string,
     screenshotBase64?: string,
     mediaAssets?: MediaAssets,
@@ -227,23 +277,31 @@ export class AnthropicAgent implements IAgent {
     }
     content.push({ type: "text", text: textBlocks.filter(Boolean).join("\n\n") });
 
-    const text = await this.callAnthropic(
-      this.model,
-      [
-        SYSTEM_PROMPT,
-        "Return only the complete HTML document. Do not use Markdown fences.",
-        "Write at least 6500 characters of real HTML/CSS/JS.",
-        screenshotBase64
-          ? "A screenshot of the target page is included in the user message. Use it as the primary visual reference for colours, layout, fonts, and spacing."
-          : "Infer the visual style from the blueprint: match the colour palette, layout structure, and typography of the target site.",
-        "Real media asset URLs have been extracted from the live page and are included in the user message. Use them directly with <img src>, CSS background-image, and <link> tags. Never use placeholder image services like picsum, placehold.it, or unsplash.",
-        "Include header, hero, stats/highlights strip if present, key feature sections, and footer.",
-        "Use plain text labels instead of emoji for nav and social links.",
-      ].join("\n"),
-      content,
-      8192,
-      signal,
-    );
+    const system = [
+      SYSTEM_PROMPT,
+      "Return only the complete HTML document. Do not use Markdown fences.",
+      "Write at least 6500 characters of real HTML/CSS/JS.",
+      screenshotBase64
+        ? "A screenshot of the target page is included in the user message. Use it as the primary visual reference for colours, layout, fonts, and spacing."
+        : "Infer the visual style from the blueprint: match the colour palette, layout structure, and typography of the target site.",
+      "Real media asset URLs have been extracted from the live page and are included in the user message. Use them directly with <img src>, CSS background-image, and <link> tags. Never use placeholder image services like picsum, placehold.it, or unsplash.",
+      "Include header, hero, stats/highlights strip if present, key feature sections, and footer.",
+      "Use plain text labels instead of emoji for nav and social links.",
+    ].join("\n");
+
+    const isFinalStep = step >= MAX_AGENT_STEPS - 1;
+    const hasOpenRouter = !!process.env.OPENROUTER_API_KEY;
+
+    const text =
+      isFinalStep || !hasOpenRouter
+        ? await this.callAnthropic(this.model, system, content, 8192, signal)
+        : await this.callOpenRouter(
+            "qwen/qwen3-235b-a22b:free",
+            system,
+            content,
+            8192,
+            signal,
+          );
 
     return this.extractHtml(text);
   }
@@ -264,10 +322,10 @@ export class AnthropicAgent implements IAgent {
 
     try {
       const route = this.router.resolve("url_resolve");
-      const raw = await this.callAnthropic(
-        route.provider === "anthropic" ? route.model : DEFAULT_ANTHROPIC_FAST_MODEL,
+      const raw = await this.callOpenAICompatible(
+        route,
         "You are a URL resolver. Given a user instruction about cloning or recreating a website, respond with ONLY the canonical homepage URL of the target site. No explanation, no markdown, no punctuation, just the URL.",
-        [{ type: "text", text: userInput }],
+        userInput,
         80,
         signal,
       );
@@ -381,6 +439,113 @@ export class AnthropicAgent implements IAgent {
     );
   }
 
+  private async callOpenRouter(
+    model: string,
+    system: string,
+    content: AnthropicContentBlock[],
+    maxTokens: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      throw new Error("OPENROUTER_API_KEY not set");
+    }
+
+    const messages = [
+      {
+        role: "user",
+        content: content.map((block) =>
+          block.type === "image"
+            ? {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/png;base64,${block.source.data}`,
+                },
+              }
+            : { type: "text", text: block.text },
+        ),
+      },
+    ];
+
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          "HTTP-Referer": "https://github.com/forge-agent",
+          "X-Title": "forge-agent",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          messages,
+          system,
+        }),
+      },
+    );
+
+    const data = (await response.json()) as OpenRouterResponse;
+    if (!response.ok || data.error) {
+      throw new Error(
+        data.error?.message ??
+          `OpenRouter API request failed with status ${response.status}`,
+      );
+    }
+
+    return data.choices?.[0]?.message?.content?.trim() ?? "";
+  }
+
+  private async callOpenAICompatible(
+    route: ReturnType<TaskRouter["resolve"]>,
+    system: string,
+    userMessage: string,
+    maxTokens: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const { baseURL, apiKey } = this.router.buildOpenAICompatibleClient(route);
+
+    if (!apiKey) {
+      throw new Error(`${route.provider.toUpperCase()} API key not set`);
+    }
+
+    const response = await fetch(`${baseURL}/chat/completions`, {
+      method: "POST",
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+        "HTTP-Referer": "https://github.com/forge-agent",
+        "X-Title": "forge-agent",
+      },
+      body: JSON.stringify({
+        model: route.model,
+        max_tokens: maxTokens,
+        temperature: 0,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: userMessage },
+        ],
+      }),
+    });
+
+    const data = (await response.json()) as OpenRouterResponse;
+    if (response.status === 429) {
+      this.router.markFailed(route);
+      throw new Error(`${route.provider} quota exceeded`);
+    }
+    if (!response.ok || data.error) {
+      throw new Error(
+        data.error?.message ??
+          `${route.provider} API request failed with status ${response.status}`,
+      );
+    }
+
+    return data.choices?.[0]?.message?.content?.trim() ?? "";
+  }
+
   private extractHtml(text: string): string {
     const fenced = text.match(/```(?:html)?\s*([\s\S]*?)```/i)?.[1];
     const candidate = fenced ?? text;
@@ -468,6 +633,6 @@ export class AnthropicAgent implements IAgent {
     });
 
     const compact = importantLines.join("\n").replace(/\n{3,}/g, "\n\n");
-    return (compact || blueprint).slice(0, 6500);
+    return (compact || blueprint).slice(0, 3500);
   }
 }

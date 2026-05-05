@@ -1,6 +1,5 @@
 import {
   DEFAULT_ANTHROPIC_CODE_MODEL,
-  DEFAULT_ANTHROPIC_FAST_MODEL,
   GROQ_JUDGE_MODEL,
 } from "./constants.js";
 
@@ -15,7 +14,7 @@ export type TaskRoute = {
 };
 
 export const MODEL_ROUTES: Record<TaskType, TaskRoute> = {
-  url_resolve: { provider: "anthropic", model: DEFAULT_ANTHROPIC_FAST_MODEL },
+  url_resolve: { provider: "groq", model: "llama-3.3-70b-versatile" },
   code_gen: { provider: "anthropic", model: DEFAULT_ANTHROPIC_CODE_MODEL },
   vision: { provider: "anthropic", model: DEFAULT_ANTHROPIC_CODE_MODEL },
   judge: { provider: "groq", model: GROQ_JUDGE_MODEL },
